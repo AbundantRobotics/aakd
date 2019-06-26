@@ -96,9 +96,17 @@ class AKD:
     def commandI(self, cmd):
         return int(self.command(cmd))
 
-    def commandF(self, cmd):
-        """ Execute command and return the result as a float. """
-        return float(self.command(cmd))
+    def commandF(self, cmd, unit=False):
+        """ Execute command and return the result as a float. If unit is given also return the unit. """
+        r = self.command(cmd)
+        g = re.match(b"(.*?)( \[(.*?)\])", r)
+        if g:
+            if unit and g.group(2):
+                return (float(g.group(1)), g.group(3).decode())
+            else:
+                return float(g.group(1))
+        else:
+            raise Exception("Expecting a float, got {}", r)
 
     def commandS(self, cmd):
         """ Execute command and return the result as a string. """
@@ -107,7 +115,10 @@ class AKD:
 
     def cset(self, var, value):
         """ Set a variable. """
-        self.command(var + ' ' + str(value))
+        if isinstance(value, float): #floats are rejected when they have more than 3 digits
+            self.command("{} {:.3f}".format(var, value))
+        else:
+            self.command(var + ' ' + str(value))
 
     def save_params(self, filename):
         with open(filename, 'w') as f:
@@ -237,6 +248,7 @@ def record(akds, files, frequency, to_records, internal_trigger_akd_index=0,
 
     for a, t in zip(akds, to_records):
         a.rec_setup(frequency, t)
+        a.rec_header()  # First call to this is always wrong...
 
     # we want the internal trigger to be off before recording
     akds[internal_trigger_akd_index].cset("DOUT1.STATEU", 0)
@@ -260,19 +272,16 @@ def record(akds, files, frequency, to_records, internal_trigger_akd_index=0,
                 stop = stop or interact_callback(a)
     finally:
         for a, b, f in zip(akds, buffers, files):
-            a.rec_stop()
+            try:
+                a.rec_stop()
+                print(a.rec_header(), file=f)
+            except:
+                print("possible bad file ", f.name)
 
-            # Collect buffered recorded data
-            lines = a.rec_getall()
-            for l in lines:
-                b.append(','.join([str(v) for v in l]))
-
-            # write the whole file
-            a.rec_header()  # First call to this is always wrong...
-            print(a.rec_header(), file=f)
             for l in b:
                 print(l, file=f)
             f.flush()
+
 
 
 def current_profile(a, prog_start_time, ctt):

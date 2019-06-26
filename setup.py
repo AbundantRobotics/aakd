@@ -8,14 +8,17 @@ setuptools.setup(
     version="1.0",
     author="Leonard Gerard",
     author_email="leonard@abundantrobotics.com",
-    description="A python library and tool to communicate with kollmorgen akd drives",
+    description="Python tools and library to communicate with Kollmorgen akd drives",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/AbundantRobotics/aakd",
     packages=setuptools.find_packages(),
+    install_requires=[
+        "argcomplete",
+        "pyyaml",
+    ],
     classifiers=[
         "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
     entry_points={
