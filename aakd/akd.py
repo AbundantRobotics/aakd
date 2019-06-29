@@ -7,6 +7,7 @@ import math
 import atexit
 import struct
 import socket
+import collections
 
 
 def akd_parse_internal(s):
@@ -45,6 +46,7 @@ def set_max_window_size(tsocket, command, option):
     elif command in (WILL, WONT):
         tsocket.send(IAC + DONT + option)
 
+
 class AKD:
     """
     Can be used simply as an object
@@ -58,7 +60,8 @@ class AKD:
         except socket.timeout:
             t = None
         if not t:
-            raise Exception("Could not connect to " + ip + ", verify that nothing is already connected to it.")
+            raise Exception("Could not connect to " + ip +
+                            ", verify that nothing is already connected to it.")
         self.t = t
         self.t.set_option_negotiation_callback(set_max_window_size)
         self.ip = ip
@@ -97,7 +100,9 @@ class AKD:
         return int(self.command(cmd))
 
     def commandF(self, cmd, unit=False):
-        """ Execute command and return the result as a float. If unit is given also return the unit. """
+        """ Execute command and return the result as a float.
+            If unit is given also return the unit.
+        """
         r = self.command(cmd)
         g = re.match(b"(.*?)( \[(.*?)\])", r)
         if g:
@@ -115,7 +120,7 @@ class AKD:
 
     def cset(self, var, value):
         """ Set a variable. """
-        if isinstance(value, float): #floats are rejected when they have more than 3 digits
+        if isinstance(value, float):  # floats are rejected when they have more than 3 digits
             self.command("{} {:.3f}".format(var, value))
         else:
             self.command(var + ' ' + str(value))
@@ -177,29 +182,28 @@ class AKD:
         self.rec_time = 0
         self.rec_time_incr = 1 / self.frequency
 
-    def rec_stop(self):
-        self.command("rec.off")
-
-    def rec_get(self):
+    def rec_get(self, data):
         lines = self.command("rec.retrievedata").splitlines()
-        r = []
+        gotdata = False
         for l in lines[1:]:
-            r.append([
+            data.append([
                 self.rec_time,
                 *(akd_parse_internal(v) for v in l.split(b','))
             ])
             self.rec_time = self.rec_time + self.rec_time_incr
-        return r
+            gotdata = True
+        return gotdata
 
-    def rec_getall(self):
-        r = []
-        while True:
-            r0 = self.rec_get()
-            if r0:
-                r = r + r0
-            else:
-                break
-        return r
+    def rec_stop(self, data):
+        self.command("rec.off")
+        while self.rec_get(data):
+            pass
+        gotdata = True
+        while gotdata:
+            time.sleep(min(0.3, 1000.0 / self.frequency))
+            gotdata = False
+            while self.rec_get(data):
+                gotdata = True
 
     def rec_header(self):
         return "time[s]," + ",".join(self.rec_columns())
@@ -242,46 +246,44 @@ class AKD:
         print("Drive disabled")
 
 
-def record(akds, files, frequency, to_records, internal_trigger_akd_index=0,
+def record(akds, files, frequency, to_records, internal_trigger_akd_index=-1,
            interact_callback=lambda akd: False):
-    buffers = [[] for a in akds]   # We are not writing direct to disk
+    buffers = [collections.deque() for a in akds]   # We are not writing direct to disk
 
     for a, t in zip(akds, to_records):
         a.rec_setup(frequency, t)
-        a.rec_header()  # First call to this is always wrong...
 
-    # we want the internal trigger to be off before recording
-    akds[internal_trigger_akd_index].cset("DOUT1.STATEU", 0)
+    if 0 <= internal_trigger_akd_index < len(akds):
+        # we want the internal trigger to be off before recording
+        akds[internal_trigger_akd_index].cset("DOUT1.STATEU", 0)
 
     # start recording
     for a in akds:
         a.rec_start()
 
-    # internal trigger (flip dout1 to get din2 to flip)
-    akds[internal_trigger_akd_index].cset("DOUT1.STATEU", 1)
-    time.sleep(1 / frequency)  # ensure the flipping is recorded
-    akds[internal_trigger_akd_index].cset("DOUT1.STATEU", 0)
+    if 0 <= internal_trigger_akd_index < len(akds):
+        # internal trigger (flip dout1 to get din2 to flip)
+        akds[internal_trigger_akd_index].cset("DOUT1.STATEU", 1)
+        time.sleep(1 / frequency)  # ensure the flipping is recorded
+        akds[internal_trigger_akd_index].cset("DOUT1.STATEU", 0)
 
     stop = False
     try:
         while not stop:
             for a, b in zip(akds, buffers):
-                lines = a.rec_get()
-                for l in lines:
-                    b.append(','.join([str(v) for v in l]))
+                a.rec_get(b)
                 stop = stop or interact_callback(a)
     finally:
         for a, b, f in zip(akds, buffers, files):
             try:
-                a.rec_stop()
+                a.rec_stop(b)
                 print(a.rec_header(), file=f)
             except:
                 print("possible bad file ", f.name)
 
             for l in b:
-                print(l, file=f)
+                print(','.join(str(v) for v in l), file=f)
             f.flush()
-
 
 
 def current_profile(a, prog_start_time, ctt):
