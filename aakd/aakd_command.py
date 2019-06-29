@@ -235,6 +235,8 @@ def main():
     args = parser.parse_args()
     if 'func' in args.__dict__:
         args.func(args)
+    else:
+        parser.print_usage()
 
 if __name__ == "__main__":
     main()
