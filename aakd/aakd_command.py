@@ -152,85 +152,90 @@ def completion_cmd(prefix, parsed_args, **kwargs):
     return (key for key in akd_lib.akd_command_list.keys() if key.startswith(prefix))
 
 
-# Parser definition
+
+def main():
+    # Parser definition
 
 
-parser = argparse.ArgumentParser(description="Run a command on an AKD drive or a list of them.")
-parser.add_argument('--ip', type=str, action='append', default=[],  help="Drive IP/hostname to save")
-parser.add_argument('--drives_file', '-d', type=str,
-                    help="A yaml file with drive descriptions with field 'ip'")
-pg = parser.add_argument('--groups', '-g', type=str, action='append', default=[],
-                         help="A list of groups the drive need to match, like \"-g arm akdn\"")
-pg.completer = completion_groups
+    parser = argparse.ArgumentParser(description="Run a command on an AKD drive or a list of them.")
+    parser.add_argument('--ip', type=str, action='append', default=[],  help="Drive IP/hostname to save")
+    parser.add_argument('--drives_file', '-d', type=str,
+                        help="A yaml file with drive descriptions with field 'ip'")
+    pg = parser.add_argument('--groups', '-g', type=str, action='append', default=[],
+                             help="A list of groups the drive need to match, like \"-g arm akdn\"")
+    pg.completer = completion_groups
 
 
-subparsers = parser.add_subparsers()
+    subparsers = parser.add_subparsers()
 
-# `cmd` subcommand
+    # `cmd` subcommand
 
-cmd_parser = subparsers.add_parser('cmd')
-cmd_arg = cmd_parser.add_argument('cmd', type=str, nargs='+',
-                                  help="Command to give to the drives. `drv.name` or `drv.en 0`.")
-cmd_arg.completer = completion_cmd
-cmd_parser.set_defaults(func=akd_cmd)
-
-
-# `restore` subcommand
-
-restore_parser = subparsers.add_parser(
-    'restore',
-    description="Restore a drive parameters from a file (20sec per drive).")
-restore_parser.add_argument('--akd_file', '-a', type=str,
-                            help="Filename of the drive parameters,"
-                            " default to drive internal name.")
-restore_parser.add_argument('--factory', action="store_true",
-                            help="Factory reset before writing the parameters")
-restore_parser.set_defaults(func=restore_params)
+    cmd_parser = subparsers.add_parser('cmd')
+    cmd_arg = cmd_parser.add_argument('cmd', type=str, nargs='+',
+                                      help="Command to give to the drives. `drv.name` or `drv.en 0`.")
+    cmd_arg.completer = completion_cmd
+    cmd_parser.set_defaults(func=akd_cmd)
 
 
-# `save` subcommand
+    # `restore` subcommand
 
-save_parser = subparsers.add_parser(
-    'save',
-    description="save a drive parameters to flash and to file.")
-save_parser.add_argument('--akd_file', '-a', type=str,
-                            help="Filename of the drive parameters,"
-                            " default to drive internal name.")
-save_parser.set_defaults(func=save_params)
-
-
-# `record` subcommand
-
-record_parser = subparsers.add_parser(
-    'record',
-    description='Record an akd velocity profile, stop with Ctrl+c')
-record_parser.add_argument('--fields', help='Fields to record', default="IL.FB,IL.CMD,VL.FB")
-record_parser.add_argument('--frequency', type=int, help='Frequency [Hz]', default=1000)
-record_parser.add_argument('--filename', help='Filename postfix (annotation)', default="")
-record_parser.set_defaults(func=record)
-
-# `home_here subcommand
-
-home_parser = subparsers.add_parser(
-        'home',
-        description="Change fb1.offset to ensure current position (pl.fb) is 0.")
-home_parser.set_defaults(func=home_here)
+    restore_parser = subparsers.add_parser(
+        'restore',
+        description="Restore a drive parameters from a file (20sec per drive).")
+    restore_parser.add_argument('--akd_file', '-a', type=str,
+                                help="Filename of the drive parameters,"
+                                " default to drive internal name.")
+    restore_parser.add_argument('--factory', action="store_true",
+                                help="Factory reset before writing the parameters")
+    restore_parser.set_defaults(func=restore_params)
 
 
-# `script` subcommand
+    # `save` subcommand
 
-script_parser = subparsers.add_parser(
-    'script',
-    description='Runs a script')
-script_parser.add_argument('script_file', help='Filename of the script')
-script_parser.add_argument('--seperator', default='\n', help='Seperator between command outputs')
-script_parser.set_defaults(func=run_script)
+    save_parser = subparsers.add_parser(
+        'save',
+        description="save a drive parameters to flash and to file.")
+    save_parser.add_argument('--akd_file', '-a', type=str,
+                                help="Filename of the drive parameters,"
+                                " default to drive internal name.")
+    save_parser.set_defaults(func=save_params)
+
+
+    # `record` subcommand
+
+    record_parser = subparsers.add_parser(
+        'record',
+        description='Record an akd velocity profile, stop with Ctrl+c')
+    record_parser.add_argument('--fields', help='Fields to record', default="IL.FB,IL.CMD,VL.FB")
+    record_parser.add_argument('--frequency', type=int, help='Frequency [Hz]', default=1000)
+    record_parser.add_argument('--filename', help='Filename postfix (annotation)', default="")
+    record_parser.set_defaults(func=record)
+
+    # `home_here subcommand
+
+    home_parser = subparsers.add_parser(
+            'home',
+            description="Change fb1.offset to ensure current position (pl.fb) is 0.")
+    home_parser.set_defaults(func=home_here)
+
+
+    # `script` subcommand
+
+    script_parser = subparsers.add_parser(
+        'script',
+        description='Runs a script')
+    script_parser.add_argument('script_file', help='Filename of the script')
+    script_parser.add_argument('--seperator', default='\n', help='Seperator between command outputs')
+    script_parser.set_defaults(func=run_script)
 
 
 
 
-argcomplete.autocomplete(parser)
-args = parser.parse_args()
-if 'func' in args.__dict__:
-    args.func(args)
+    argcomplete.autocomplete(parser)
+    args = parser.parse_args()
+    if 'func' in args.__dict__:
+        args.func(args)
+
+if __name__ == "__main__":
+    main()
 
