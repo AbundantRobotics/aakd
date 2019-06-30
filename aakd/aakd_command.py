@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # PYTHON_ARGCOMPLETE_OK
 
-from aakd import *
+import aakd
 
 import argcomplete
 import argparse
@@ -42,9 +42,9 @@ def create_AKD(ip, args):
 
     lip = ip.split(':')
     if len(lip) == 1:
-        return AKD(ip, trace=trace)
+        return aakd.AKD(ip, trace=trace)
     elif len(lip) == 2:
-        return AKD(lip[0], port=lip[1], trace=trace)
+        return aakd.AKD(lip[0], port=lip[1], trace=trace)
     else:
         raise Exception("Ip '{}' is invalid".format(ip))
 
@@ -113,7 +113,7 @@ def record(args):
         ]
         to_record = [args.fields.split(',')] * len(akds)
         print(to_record)
-        akd.record(akds, files, frequency, to_record)
+        aakd.record(akds, files, frequency, to_record)
     finally:
         for f in files:
             f.close()
@@ -157,11 +157,11 @@ def completion_groups(prefix, parsed_args, **kwargs):
 
 
 def completion_cmd(prefix, parsed_args, **kwargs):
-    if parsed_args.cmd and parsed_args.cmd[0] in akd_command_list.akd_cmd_list:
-        (t, h) = akd_command_list.akd_cmd_list[parsed_args.cmd[0]]
+    if parsed_args.cmd and parsed_args.cmd[0] in aakd.akd_command_list:
+        (t, h) = aakd.akd_command_list[parsed_args.cmd[0]]
         argcomplete.warn(h + ' (' + t + ')')
         return []
-    return (key for key in akd_command_list.keys() if key.startswith(prefix))
+    return (key for key in aakd.akd_command_list.keys() if key.startswith(prefix))
 
 
 
