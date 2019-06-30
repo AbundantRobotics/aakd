@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # PYTHON_ARGCOMPLETE_OK
 
-from aakd import AKD
+from aakd import akd, AKD
 
 import argcomplete
 import argparse
