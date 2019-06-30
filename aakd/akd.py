@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 
 import re
 import telnetlib
@@ -8,6 +7,7 @@ import atexit
 import struct
 import socket
 import collections
+import threading
 
 
 def akd_parse_internal(s):
@@ -54,9 +54,9 @@ class AKD:
     or can be used in a contextmanager (`with`)
     """
 
-    def __init__(self, ip):
+    def __init__(self, ip, trace=False):
         try:
-            t = telnetlib.Telnet(ip, timeout=1)
+            t = telnetlib.Telnet(ip, port=2222, timeout=1)
         except socket.timeout:
             t = None
         if not t:
@@ -65,6 +65,8 @@ class AKD:
         self.t = t
         self.t.set_option_negotiation_callback(set_max_window_size)
         self.ip = ip
+        self.trace = trace
+        self.t.read_very_eager()  # safety for random garbage
         self.name = self.commandS("drv.name")
         atexit.register(AKD.__del__, self)
 
@@ -81,8 +83,11 @@ class AKD:
         return False
 
     def command(self, cmd, timeout=5):
-        self.t.read_eager()  # safety for random garbage, not necessary though
-        self.t.write(cmd.encode('ascii') + b'\r\n')
+        sending = cmd.encode('ascii') + b'\r\n'
+        if self.trace:
+            print(repr(sending))
+        self.t.write(sending)
+
         answer = b""
         while True:
             answer += self.t.read_until(b"-->", timeout)
@@ -94,6 +99,8 @@ class AKD:
             r = re.match(b"(.*)\r\n-->", answer, re.MULTILINE | re.DOTALL)
             if not r:
                 continue
+            if self.trace:
+                print(repr(answer))
             return r.group(1)
 
     def commandI(self, cmd):
@@ -164,9 +171,8 @@ class AKD:
         self.cset("rec.numpoints", 10000)  # max buffer size for recording
         self.cset("rec.stoptype", 1)  # 0 for one shot, 1 for continuous
         self.cset("rec.retrievefrmt", 1)  # 0 for readable, 1 for internal
-        self.cset("rec.retrievesize", 1048)
+        self.cset("rec.retrievesize", 4800)
 
-        print(self.commandS("rec.retrievesize"))
         j = 1
         for c in to_record:
             self.cset("rec.ch" + str(j), c)
@@ -185,7 +191,6 @@ class AKD:
     def rec_get(self, data):
         lines = self.command("rec.retrievedata").splitlines()
         gotdata = False
-        print(lines[0])
         for l in lines[1:]:
             data.append([
                 self.rec_time,
@@ -196,20 +201,12 @@ class AKD:
         return gotdata
 
     def rec_stop(self, data):
-        print("stopping")
         self.command("rec.off")
         while self.rec_get(data):
             pass
-        gotdata = True
-        while gotdata:
-            time.sleep(min(0.3, self.frequency / 500 ))
-            print("gotmore")
-            gotdata = False
-            while self.rec_get(data):
-                gotdata = True
 
     def rec_header(self):
-        return "time[s]," + ",".join(self.rec_columns())
+        return "time [s]," + ",".join(self.rec_columns())
 
     def set_std_units(self):
         self.cset("unit.protary", 2)  # deg
@@ -251,42 +248,72 @@ class AKD:
 
 def record(akds, files, frequency, to_records, internal_trigger_akd_index=-1,
            interact_callback=lambda akd: False):
-    buffers = [collections.deque() for a in akds]   # We are not writing direct to disk
+    buffers = [collections.deque() for a in akds]
 
     for a, t in zip(akds, to_records):
         a.rec_setup(frequency, t)
 
-    if 0 <= internal_trigger_akd_index < len(akds):
-        # we want the internal trigger to be off before recording
-        akds[internal_trigger_akd_index].cset("DOUT1.STATEU", 0)
-
-    # start recording
-    for a in akds:
-        a.rec_start()
-
-    if 0 <= internal_trigger_akd_index < len(akds):
-        # internal trigger (flip dout1 to get din2 to flip)
-        akds[internal_trigger_akd_index].cset("DOUT1.STATEU", 1)
-        time.sleep(1 / frequency)  # ensure the flipping is recorded
-        akds[internal_trigger_akd_index].cset("DOUT1.STATEU", 0)
-
-    stop = False
-    try:
-        while not stop:
-            for a, b in zip(akds, buffers):
+    def worker(a, b, c):
+        try:
+            a.rec_start()
+            b.append([a.rec_header()])
+            while not c(a):
                 a.rec_get(b)
-                stop = stop or interact_callback(a)
-    finally:
-        for a, b, f in zip(akds, buffers, files):
+        finally:
             try:
                 a.rec_stop(b)
-                print(a.rec_header(), file=f)
             except:
-                print("possible bad file ", f.name)
+                print("possible bad file")
 
-            for l in b:
-                print(','.join(str(v) for v in l), file=f)
+    stop = False
+    cnt = 0
+
+    def internal_trigger_callback(a):
+        if cnt < 2:
+            a.cset("DOUT1.STATEU", 0)
+        elif cnt < 3:
+            a.cset("DOUT1.STATEU", 1)
+        elif cnt < 4:
+            a.cset("DOUT1.STATEU", 0)
+        cnt = cnt + 1
+        return stop or interact_callback(a)
+
+    def regular_callback(a):
+        return stop or interact_callback(a)
+
+    threads = []
+    for i, (a, b) in enumerate(zip(akds, buffers)):
+        if i == internal_trigger_akd_index:
+            threads.append(threading.Thread(target=worker, args=(a, b, internal_trigger_callback)))
+        else:
+            threads.append(threading.Thread(target=worker, args=(a, b, regular_callback)))
+
+    for t in threads:
+        t.start()
+
+    def empty_buffers():
+        for b, f in zip(buffers, files):
+            topop = len(b)
+            for _ in range(topop):
+                print(','.join(str(v) for v in b.popleft()), file=f)
             f.flush()
+
+    while not stop:
+        try:
+            empty_buffers()
+            for t in threads:
+                stop = stop or not t.is_alive()
+            time.sleep(0.01)
+        except KeyboardInterrupt:
+            print("Stopping the recording")
+            stop = True
+            for t in threads:
+                t.join()
+            empty_buffers()
+        except:
+            stop = True
+            print("possible bad file")
+            raise
 
 
 def current_profile(a, prog_start_time, ctt):

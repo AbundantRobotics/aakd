@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # PYTHON_ARGCOMPLETE_OK
 
-from aakd import *
+from aakd import AKD
 
 import argcomplete
 import argparse
@@ -102,6 +102,8 @@ def record(args):
         to_record = [args.fields.split(',')] * len(akds)
         print(to_record)
         akd.record(akds, files, frequency, to_record)
+    except KeyboardInterrupt:
+        pass
     finally:
         for f in files:
             f.close()
@@ -238,6 +240,6 @@ def main():
     else:
         parser.print_usage()
 
+
 if __name__ == "__main__":
     main()
-
