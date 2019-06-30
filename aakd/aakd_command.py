@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # PYTHON_ARGCOMPLETE_OK
 
-import aakd
+from aakd import *
 
 import argcomplete
 import argparse
@@ -42,7 +42,7 @@ def nice_name(name, ip):
 def akd_cmd(args):
     for (name, ip) in drives(args):
         try:
-            a = akd_lib.AKD(ip)
+            a = AKD(ip)
             print(nice_name(name, ip), ": ", a.commandS(' '.join(args.cmd)))
         except Exception as e:
             print(nice_name(name, ip), " Error: ", str(e), file=sys.stderr)
@@ -51,7 +51,7 @@ def akd_cmd(args):
 def restore_params(args):
     for (name, ip) in drives(args):
         try:
-            a = akd_lib.AKD(ip)
+            a = AKD(ip)
             if not args.akd_file:
                 filename = a.name + ".akd"
             else:
@@ -71,7 +71,7 @@ def restore_params(args):
 def save_params(args):
     for (name, ip) in drives(args):
         try:
-            a = akd_lib.AKD(ip)
+            a = AKD(ip)
             if not args.akd_file:
                 filename = a.name + ".akd"
             else:
@@ -93,7 +93,7 @@ def record(args):
 
     files = []
     try:
-        akds = [akd_lib.AKD(ip) for (name, ip) in drives(args)]
+        akds = [AKD(ip) for (name, ip) in drives(args)]
         files = [
             open(filename + a.commandS("drv.name") +
                  "_" + str(frequency) + "hz.csv", mode='w')
@@ -101,7 +101,7 @@ def record(args):
         ]
         to_record = [args.fields.split(',')] * len(akds)
         print(to_record)
-        akd_lib.akd.record(akds, files, frequency, to_record)
+        akd.record(akds, files, frequency, to_record)
     finally:
         for f in files:
             f.close()
@@ -110,7 +110,7 @@ def record(args):
 def home_here(args):
     for (name, ip) in drives(args):
         try:
-            a = akd_lib.AKD(ip)
+            a = AKD(ip)
             current_pos = a.commandF("pl.fb")
             (current_off, unit) = a.commandF("fb1.offset", unit=True)
             new_off = -(current_pos - current_off)
@@ -123,7 +123,7 @@ def home_here(args):
 def run_script(args):
     for (name, ip) in drives(args):
         try:
-            a = akd_lib.AKD(ip)
+            a = AKD(ip)
             with open(args.script_file) as s:
                 for c in s:
                     if c[0] == ' ':  # we do not print the ouput
@@ -149,7 +149,7 @@ def completion_cmd(prefix, parsed_args, **kwargs):
         (t, h) = akd_command_list.akd_cmd_list[parsed_args.cmd[0]]
         argcomplete.warn(h + ' (' + t + ')')
         return []
-    return (key for key in akd_lib.akd_command_list.keys() if key.startswith(prefix))
+    return (key for key in akd_command_list.keys() if key.startswith(prefix))
 
 
 

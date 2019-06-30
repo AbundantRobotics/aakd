@@ -22,8 +22,8 @@ Trying to set the window size to a big enough size so that we can get big messag
 see https://stackoverflow.com/questions/38288887/python-telnetlib-read-until-returns-cut-off-string
 """
 from telnetlib import DO, DONT, IAC, WILL, WONT, NAWS, SB, SE
-MAX_WINDOW_WIDTH = 500  # Max Value: 65535
-MAX_WINDOW_HEIGHT = 500
+MAX_WINDOW_WIDTH = 20000  # Max Value: 65535
+MAX_WINDOW_HEIGHT = 65535
 def set_max_window_size(tsocket, command, option):
     """
     Set Window size to resolve line width issue
@@ -164,9 +164,9 @@ class AKD:
         self.cset("rec.numpoints", 10000)  # max buffer size for recording
         self.cset("rec.stoptype", 1)  # 0 for one shot, 1 for continuous
         self.cset("rec.retrievefrmt", 1)  # 0 for readable, 1 for internal
-        retrievesize = 4800
-        self.cset("rec.retrievesize", retrievesize)
+        self.cset("rec.retrievesize", 1048)
 
+        print(self.commandS("rec.retrievesize"))
         j = 1
         for c in to_record:
             self.cset("rec.ch" + str(j), c)
@@ -185,6 +185,7 @@ class AKD:
     def rec_get(self, data):
         lines = self.command("rec.retrievedata").splitlines()
         gotdata = False
+        print(lines[0])
         for l in lines[1:]:
             data.append([
                 self.rec_time,
@@ -195,12 +196,14 @@ class AKD:
         return gotdata
 
     def rec_stop(self, data):
+        print("stopping")
         self.command("rec.off")
         while self.rec_get(data):
             pass
         gotdata = True
         while gotdata:
-            time.sleep(min(0.3, 1000.0 / self.frequency))
+            time.sleep(min(0.3, self.frequency / 500 ))
+            print("gotmore")
             gotdata = False
             while self.rec_get(data):
                 gotdata = True
