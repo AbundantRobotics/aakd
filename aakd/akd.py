@@ -54,9 +54,9 @@ class AKD:
     or can be used in a contextmanager (`with`)
     """
 
-    def __init__(self, ip, trace=False):
+    def __init__(self, ip, port=23, trace=False):
         try:
-            t = telnetlib.Telnet(ip, port=2222, timeout=1)
+            t = telnetlib.Telnet(ip, port=port, timeout=1)
         except socket.timeout:
             t = None
         if not t:
@@ -85,22 +85,26 @@ class AKD:
     def command(self, cmd, timeout=5):
         sending = cmd.encode('ascii') + b'\r\n'
         if self.trace:
-            print(repr(sending))
+            print(time.time(), repr(sending), flush=True)
         self.t.write(sending)
 
         answer = b""
         while True:
             answer += self.t.read_until(b"-->", timeout)
             if not answer:
+                if self.trace:
+                    print(time.time(), repr(answer), flush=True)
                 raise Exception("AKD {} (cmd: {}) doesn't respond".format(self.name, repr(cmd)))
             g = re.match(b"Error:(.*)", answer, re.MULTILINE | re.DOTALL)
             if g:
+                if self.trace:
+                    print(time.time(), repr(answer), flush=True)
                 raise Exception("AKD {} (cmd: {}) Error: {}".format(self.name, repr(cmd), g.group(1)))
             r = re.match(b"(.*)\r\n-->", answer, re.MULTILINE | re.DOTALL)
             if not r:
                 continue
             if self.trace:
-                print(repr(answer))
+                print(time.time(), repr(answer), flush=True)
             return r.group(1)
 
     def commandI(self, cmd):

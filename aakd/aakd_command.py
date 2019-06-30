@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # PYTHON_ARGCOMPLETE_OK
 
-from aakd import akd, AKD
+from aakd import *
 
 import argcomplete
 import argparse
@@ -37,12 +37,24 @@ def nice_name(name, ip):
     return name + " (ip: " + ip + ")"
 
 
+def create_AKD(ip, args):
+    trace = args.trace
+
+    lip = ip.split(':')
+    if len(lip) == 1:
+        return AKD(ip, trace=trace)
+    elif len(lip) == 2:
+        return AKD(lip[0], port=lip[1], trace=trace)
+    else:
+        raise Exception("Ip '{}' is invalid".format(ip))
+
+
 # Subcommands function
 
 def akd_cmd(args):
     for (name, ip) in drives(args):
         try:
-            a = AKD(ip)
+            a = create_AKD(ip, args)
             print(nice_name(name, ip), ": ", a.commandS(' '.join(args.cmd)))
         except Exception as e:
             print(nice_name(name, ip), " Error: ", str(e), file=sys.stderr)
@@ -51,7 +63,7 @@ def akd_cmd(args):
 def restore_params(args):
     for (name, ip) in drives(args):
         try:
-            a = AKD(ip)
+            a = create_AKD(ip, args)
             if not args.akd_file:
                 filename = a.name + ".akd"
             else:
@@ -71,7 +83,7 @@ def restore_params(args):
 def save_params(args):
     for (name, ip) in drives(args):
         try:
-            a = AKD(ip)
+            a = create_AKD(ip, args)
             if not args.akd_file:
                 filename = a.name + ".akd"
             else:
@@ -93,7 +105,7 @@ def record(args):
 
     files = []
     try:
-        akds = [AKD(ip) for (name, ip) in drives(args)]
+        akds = [create_AKD(ip, args) for (name, ip) in drives(args)]
         files = [
             open(filename + a.commandS("drv.name") +
                  "_" + str(frequency) + "hz.csv", mode='w')
@@ -102,8 +114,6 @@ def record(args):
         to_record = [args.fields.split(',')] * len(akds)
         print(to_record)
         akd.record(akds, files, frequency, to_record)
-    except KeyboardInterrupt:
-        pass
     finally:
         for f in files:
             f.close()
@@ -112,7 +122,7 @@ def record(args):
 def home_here(args):
     for (name, ip) in drives(args):
         try:
-            a = AKD(ip)
+            a = create_AKD(ip, args)
             current_pos = a.commandF("pl.fb")
             (current_off, unit) = a.commandF("fb1.offset", unit=True)
             new_off = -(current_pos - current_off)
@@ -125,7 +135,7 @@ def home_here(args):
 def run_script(args):
     for (name, ip) in drives(args):
         try:
-            a = AKD(ip)
+            a = create_AKD(ip, args)
             with open(args.script_file) as s:
                 for c in s:
                     if c[0] == ' ':  # we do not print the ouput
@@ -163,8 +173,10 @@ def main():
     parser.add_argument('--ip', type=str, action='append', default=[],  help="Drive IP/hostname to save")
     parser.add_argument('--drives_file', '-d', type=str,
                         help="A yaml file with drive descriptions with field 'ip'")
+    parser.add_argument('--trace', action='store_true', help='Trace all commands and drive answers, heavy debug')
     pg = parser.add_argument('--groups', '-g', type=str, action='append', default=[],
                              help="A list of groups the drive need to match, like \"-g arm akdn\"")
+
     pg.completer = completion_groups
 
 
