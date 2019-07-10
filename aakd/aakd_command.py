@@ -37,12 +37,24 @@ def nice_name(name, ip):
     return name + " (ip: " + ip + ")"
 
 
+def create_AKD(ip, args):
+    trace = args.trace
+
+    lip = ip.split(':')
+    if len(lip) == 1:
+        return aakd.AKD(ip, trace=trace)
+    elif len(lip) == 2:
+        return aakd.AKD(lip[0], port=lip[1], trace=trace)
+    else:
+        raise Exception("Ip '{}' is invalid".format(ip))
+
+
 # Subcommands function
 
 def akd_cmd(args):
     for (name, ip) in drives(args):
         try:
-            a = akd_lib.AKD(ip)
+            a = create_AKD(ip, args)
             print(nice_name(name, ip), ": ", a.commandS(' '.join(args.cmd)))
         except Exception as e:
             print(nice_name(name, ip), " Error: ", str(e), file=sys.stderr)
@@ -51,7 +63,7 @@ def akd_cmd(args):
 def restore_params(args):
     for (name, ip) in drives(args):
         try:
-            a = akd_lib.AKD(ip)
+            a = create_AKD(ip, args)
             if not args.akd_file:
                 filename = a.name + ".akd"
             else:
@@ -71,7 +83,7 @@ def restore_params(args):
 def save_params(args):
     for (name, ip) in drives(args):
         try:
-            a = akd_lib.AKD(ip)
+            a = create_AKD(ip, args)
             if not args.akd_file:
                 filename = a.name + ".akd"
             else:
@@ -93,7 +105,7 @@ def record(args):
 
     files = []
     try:
-        akds = [akd_lib.AKD(ip) for (name, ip) in drives(args)]
+        akds = [create_AKD(ip, args) for (name, ip) in drives(args)]
         files = [
             open(filename + a.commandS("drv.name") +
                  "_" + str(frequency) + "hz.csv", mode='w')
@@ -101,7 +113,7 @@ def record(args):
         ]
         to_record = [args.fields.split(',')] * len(akds)
         print(to_record)
-        akd_lib.akd.record(akds, files, frequency, to_record)
+        aakd.record(akds, files, frequency, to_record)
     finally:
         for f in files:
             f.close()
@@ -110,7 +122,7 @@ def record(args):
 def home_here(args):
     for (name, ip) in drives(args):
         try:
-            a = akd_lib.AKD(ip)
+            a = create_AKD(ip, args)
             current_pos = a.commandF("pl.fb")
             (current_off, unit) = a.commandF("fb1.offset", unit=True)
             new_off = -(current_pos - current_off)
@@ -123,7 +135,7 @@ def home_here(args):
 def run_script(args):
     for (name, ip) in drives(args):
         try:
-            a = akd_lib.AKD(ip)
+            a = create_AKD(ip, args)
             with open(args.script_file) as s:
                 for c in s:
                     if c[0] == ' ':  # we do not print the ouput
@@ -145,92 +157,101 @@ def completion_groups(prefix, parsed_args, **kwargs):
 
 
 def completion_cmd(prefix, parsed_args, **kwargs):
-    if parsed_args.cmd and parsed_args.cmd[0] in akd_command_list.akd_cmd_list:
-        (t, h) = akd_command_list.akd_cmd_list[parsed_args.cmd[0]]
+    if parsed_args.cmd and parsed_args.cmd[0] in aakd.akd_command_list:
+        (t, h) = aakd.akd_command_list[parsed_args.cmd[0]]
         argcomplete.warn(h + ' (' + t + ')')
         return []
-    return (key for key in akd_lib.akd_command_list.keys() if key.startswith(prefix))
-
-
-# Parser definition
-
-
-parser = argparse.ArgumentParser(description="Run a command on an AKD drive or a list of them.")
-parser.add_argument('--ip', type=str, action='append', default=[],  help="Drive IP/hostname to save")
-parser.add_argument('--drives_file', '-d', type=str,
-                    help="A yaml file with drive descriptions with field 'ip'")
-pg = parser.add_argument('--groups', '-g', type=str, action='append', default=[],
-                         help="A list of groups the drive need to match, like \"-g arm akdn\"")
-pg.completer = completion_groups
-
-
-subparsers = parser.add_subparsers()
-
-# `cmd` subcommand
-
-cmd_parser = subparsers.add_parser('cmd')
-cmd_arg = cmd_parser.add_argument('cmd', type=str, nargs='+',
-                                  help="Command to give to the drives. `drv.name` or `drv.en 0`.")
-cmd_arg.completer = completion_cmd
-cmd_parser.set_defaults(func=akd_cmd)
-
-
-# `restore` subcommand
-
-restore_parser = subparsers.add_parser(
-    'restore',
-    description="Restore a drive parameters from a file (20sec per drive).")
-restore_parser.add_argument('--akd_file', '-a', type=str,
-                            help="Filename of the drive parameters,"
-                            " default to drive internal name.")
-restore_parser.add_argument('--factory', action="store_true",
-                            help="Factory reset before writing the parameters")
-restore_parser.set_defaults(func=restore_params)
-
-
-# `save` subcommand
-
-save_parser = subparsers.add_parser(
-    'save',
-    description="save a drive parameters to flash and to file.")
-save_parser.add_argument('--akd_file', '-a', type=str,
-                            help="Filename of the drive parameters,"
-                            " default to drive internal name.")
-save_parser.set_defaults(func=save_params)
-
-
-# `record` subcommand
-
-record_parser = subparsers.add_parser(
-    'record',
-    description='Record an akd velocity profile, stop with Ctrl+c')
-record_parser.add_argument('--fields', help='Fields to record', default="IL.FB,IL.CMD,VL.FB")
-record_parser.add_argument('--frequency', type=int, help='Frequency [Hz]', default=1000)
-record_parser.add_argument('--filename', help='Filename postfix (annotation)', default="")
-record_parser.set_defaults(func=record)
-
-# `home_here subcommand
-
-home_parser = subparsers.add_parser(
-        'home',
-        description="Change fb1.offset to ensure current position (pl.fb) is 0.")
-home_parser.set_defaults(func=home_here)
-
-
-# `script` subcommand
-
-script_parser = subparsers.add_parser(
-    'script',
-    description='Runs a script')
-script_parser.add_argument('script_file', help='Filename of the script')
-script_parser.add_argument('--seperator', default='\n', help='Seperator between command outputs')
-script_parser.set_defaults(func=run_script)
+    return (key for key in aakd.akd_command_list.keys() if key.startswith(prefix))
 
 
 
+def main():
+    # Parser definition
 
-argcomplete.autocomplete(parser)
-args = parser.parse_args()
-if 'func' in args.__dict__:
-    args.func(args)
 
+    parser = argparse.ArgumentParser(description="Run a command on an AKD drive or a list of them.")
+    parser.add_argument('--ip', type=str, action='append', default=[],  help="Drive IP/hostname to save")
+    parser.add_argument('--drives_file', '-d', type=str,
+                        help="A yaml file with drive descriptions with field 'ip'")
+    parser.add_argument('--trace', action='store_true', help='Trace all commands and drive answers, heavy debug')
+    pg = parser.add_argument('--groups', '-g', type=str, action='append', default=[],
+                             help="A list of groups the drive need to match, like \"-g arm akdn\"")
+
+    pg.completer = completion_groups
+
+
+    subparsers = parser.add_subparsers()
+
+    # `cmd` subcommand
+
+    cmd_parser = subparsers.add_parser('cmd')
+    cmd_arg = cmd_parser.add_argument('cmd', type=str, nargs='+',
+                                      help="Command to give to the drives. `drv.name` or `drv.en 0`.")
+    cmd_arg.completer = completion_cmd
+    cmd_parser.set_defaults(func=akd_cmd)
+
+
+    # `restore` subcommand
+
+    restore_parser = subparsers.add_parser(
+        'restore',
+        description="Restore a drive parameters from a file (20sec per drive).")
+    restore_parser.add_argument('--akd_file', '-a', type=str,
+                                help="Filename of the drive parameters,"
+                                " default to drive internal name.")
+    restore_parser.add_argument('--factory', action="store_true",
+                                help="Factory reset before writing the parameters")
+    restore_parser.set_defaults(func=restore_params)
+
+
+    # `save` subcommand
+
+    save_parser = subparsers.add_parser(
+        'save',
+        description="save a drive parameters to flash and to file.")
+    save_parser.add_argument('--akd_file', '-a', type=str,
+                                help="Filename of the drive parameters,"
+                                " default to drive internal name.")
+    save_parser.set_defaults(func=save_params)
+
+
+    # `record` subcommand
+
+    record_parser = subparsers.add_parser(
+        'record',
+        description='Record an akd velocity profile, stop with Ctrl+c')
+    record_parser.add_argument('--fields', help='Fields to record', default="IL.FB,IL.CMD,VL.FB")
+    record_parser.add_argument('--frequency', type=int, help='Frequency [Hz]', default=1000)
+    record_parser.add_argument('--filename', help='Filename postfix (annotation)', default="")
+    record_parser.set_defaults(func=record)
+
+    # `home_here subcommand
+
+    home_parser = subparsers.add_parser(
+            'home',
+            description="Change fb1.offset to ensure current position (pl.fb) is 0.")
+    home_parser.set_defaults(func=home_here)
+
+
+    # `script` subcommand
+
+    script_parser = subparsers.add_parser(
+        'script',
+        description='Runs a script')
+    script_parser.add_argument('script_file', help='Filename of the script')
+    script_parser.add_argument('--seperator', default='\n', help='Seperator between command outputs')
+    script_parser.set_defaults(func=run_script)
+
+
+
+
+    argcomplete.autocomplete(parser)
+    args = parser.parse_args()
+    if 'func' in args.__dict__:
+        args.func(args)
+    else:
+        parser.print_usage()
+
+
+if __name__ == "__main__":
+    main()
