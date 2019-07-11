@@ -55,8 +55,16 @@ class AKD:
     """
 
     def __init__(self, ip, port=23, trace=False):
+        self.ip = ip
+        self.port = port
+        self.trace = trace
+        self.connect()
+        self.name = self.commandS("drv.name")
+        atexit.register(AKD.disconnect, self)
+
+    def connect(self):
         try:
-            t = telnetlib.Telnet(ip, port=port, timeout=1)
+            t = telnetlib.Telnet(self.ip, port=self.port, timeout=1)
         except socket.timeout:
             t = None
         if not t:
@@ -64,22 +72,21 @@ class AKD:
                             ", verify that nothing is already connected to it.")
         self.t = t
         self.t.set_option_negotiation_callback(set_max_window_size)
-        self.ip = ip
-        self.trace = trace
         self.t.read_very_eager()  # safety for random garbage
-        self.name = self.commandS("drv.name")
-        atexit.register(AKD.__del__, self)
 
-    def __del__(self):
+    def disconnect(self):
         if 't' in self.__dict__:
-            self.t.close()
+            if self.t:
+                self.t.close()
 
     def __enter__(self):
         return self
 
+    def __del__(self):
+        self.disconnect()
+
     def __exit__(self, exc_type, exc_value, traceback):
-        if self.t:
-            self.t.close()
+        self.disconnect()
         return False
 
     def command(self, cmd, timeout=5):
