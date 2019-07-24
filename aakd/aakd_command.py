@@ -20,7 +20,7 @@ def drives(args):
         return [("", i) for i in ip]
     else:
         with open(drives_file) as f:
-            yy = yaml.load(f)
+            yy = yaml.load(f, Loader=yaml.Loader)
             drives = []
             for (name, p) in yy.items():
                 drive_groups = p.get("groups", [])
@@ -151,7 +151,7 @@ def run_script(args):
 def completion_groups(prefix, parsed_args, **kwargs):
     if parsed_args.drives_file:
         with open(parsed_args.drives_file) as f:
-            yy = yaml.load(f)
+            yy = yaml.load(f, Loader=yaml.Loader)
             return set(g for (n, p) in yy.items() for g in p.get("groups", []))
     return []
 
