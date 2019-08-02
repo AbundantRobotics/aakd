@@ -125,7 +125,7 @@ class AKD:
         g = re.match(b"(.*?)( \[(.*?)\])", r)
         if g:
             if unit and g.group(2):
-                return (float(g.group(1)), g.group(3).decode())
+                return (float(g.group(1)), g.group(3).decode('latin-1'))
             else:
                 return float(g.group(1))
         else:
@@ -133,7 +133,7 @@ class AKD:
 
     def commandS(self, cmd):
         """ Execute command and return the result as a string. """
-        s = self.command(cmd).decode().replace('\r\n', '\n')
+        s = self.command(cmd).decode('latin-1').replace('\r\n', '\n')
         return s
 
     def cset(self, var, value):
