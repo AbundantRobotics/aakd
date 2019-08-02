@@ -6,8 +6,6 @@ import math
 import atexit
 import struct
 import socket
-import collections
-import threading
 
 
 def akd_parse_internal(s):
@@ -17,13 +15,6 @@ def akd_parse_internal(s):
     return int(s, 16)
 
 
-"""
-Trying to set the window size to a big enough size so that we can get big messages back without line breaks.
-see https://stackoverflow.com/questions/38288887/python-telnetlib-read-until-returns-cut-off-string
-"""
-from telnetlib import DO, DONT, IAC, WILL, WONT, NAWS, SB, SE
-MAX_WINDOW_WIDTH = 20000  # Max Value: 65535
-MAX_WINDOW_HEIGHT = 65535
 def set_max_window_size(tsocket, command, option):
     """
     Set Window size to resolve line width issue
@@ -34,7 +25,14 @@ def set_max_window_size(tsocket, command, option):
     :param command: telnet Command
     :param option: telnet option
     :return: None
+
+    Trying to set the window size to a big enough size so that we can get big messages back without line breaks.
+    see https://stackoverflow.com/questions/38288887/python-telnetlib-read-until-returns-cut-off-string
     """
+    from telnetlib import DO, DONT, IAC, WILL, WONT, NAWS, SB, SE
+    MAX_WINDOW_WIDTH = 20000  # Max Value: 65535
+    MAX_WINDOW_HEIGHT = 65535
+
     if option == NAWS:
         width = struct.pack('H', MAX_WINDOW_WIDTH)
         height = struct.pack('H', MAX_WINDOW_HEIGHT)
@@ -68,7 +66,7 @@ class AKD:
         except socket.timeout:
             t = None
         if not t:
-            raise Exception("Could not connect to " + ip +
+            raise Exception("Could not connect to " + self.ip +
                             ", verify that nothing is already connected to it.")
         self.t = t
         self.t.set_option_negotiation_callback(set_max_window_size)
