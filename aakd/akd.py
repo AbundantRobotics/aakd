@@ -114,22 +114,33 @@ class AKD:
                 print(time.time(), repr(answer), flush=True)
             return r.group(1)
 
-    def commandI(self, cmd):
-        return int(self.command(cmd))
+    def commandI(self, cmd, unit=False):
+        """ Execute command and return the result as am int.
+            If unit is given also return the unit.
+        """
+        r = self.command(cmd)
+        g = re.match(b"\s*([^ ]+)( \[(.*)\])?", r)
+        if g:
+            if unit and g.group(2):
+                return (int(g.group(1)), g.group(3).decode('latin-1'))
+            else:
+                return int(g.group(1))
+        else:
+            raise Exception("Expecting an int, got {}".format(r))
 
     def commandF(self, cmd, unit=False):
         """ Execute command and return the result as a float.
             If unit is given also return the unit.
         """
         r = self.command(cmd)
-        g = re.match(b"(.*?)( \[(.*?)\])", r)
+        g = re.match(b"\s*([^ ]+)( \[(.*)\])?", r)
         if g:
             if unit and g.group(2):
                 return (float(g.group(1)), g.group(3).decode('latin-1'))
             else:
                 return float(g.group(1))
         else:
-            raise Exception("Expecting a float, got {}", r)
+            raise Exception("Expecting a float, got {}".format(r))
 
     def commandS(self, cmd):
         """ Execute command and return the result as a string. """
