@@ -19,6 +19,8 @@ def drives(args):
     if ip:
         return [("", i) for i in ip]
     else:
+        if not drives_file:
+            raise Exception("Please provide and drive file")
         with open(drives_file) as f:
             yy = yaml.load(f, Loader=yaml.Loader)
             drives = []
@@ -47,6 +49,34 @@ def create_AKD(ip, args):
         return aakd.AKD(lip[0], port=lip[1], trace=trace)
     else:
         raise Exception("Ip '{}' is invalid".format(ip))
+
+
+def list_params(drive_name, args):
+    """ Return a list of the parameters for drive_name according to drives_file and params_file"""
+    with open(args.params_file) as f:
+        paramtree = yaml.load(f, Loader=yaml.Loader)
+
+    with open(args.drives_file) as f:
+        yy = yaml.load(f, Loader=yaml.Loader)
+        gs = yy[drive_name]["groups"]
+
+    drive_params = []
+
+    # do groups first
+    def apply_group_parameters(subtree):
+        for parameter_value_pair in subtree.get("parameters", {}).items():
+            drive_params.append(parameter_value_pair)
+        for (group, subsubtree) in subtree.items():
+            if group in gs:
+                apply_group_parameters(subsubtree)
+    apply_group_parameters(paramtree.get("groups", {}))
+
+    # do specific to the drive
+    for parameter_value_pair in paramtree.get("drives", {}).get(drive_name, {}).items():
+        drive_params.append(parameter_value_pair)
+
+    return drive_params
+
 
 
 # Subcommands function
@@ -99,7 +129,7 @@ def record(args):
     filename = args.filename + '_'
     frequency = args.frequency
 
-    if (16000%frequency != 0):
+    if (16000 % frequency != 0):
         print("Error: Frequency needs to be 16kHz/2^n.")
         exit(-1)
 
@@ -132,6 +162,7 @@ def home_here(args):
         except Exception as e:
             print(nice_name(name, ip), " Error: ", str(e), file=sys.stderr)
 
+
 def run_script(args):
     for (name, ip) in drives(args):
         try:
@@ -145,6 +176,17 @@ def run_script(args):
         except Exception as e:
             print(nice_name(name, ip), " Error: ", str(e), file=sys.stderr)
     print()
+
+
+def list_parameters(args):
+    for (name, ip) in drives(args):
+        print("##########")
+        print("# ", nice_name(name, ip), ":")
+        for (p, v) in list_params(name, args):
+            print(p, v)
+
+
+
 # Completion functions
 
 
@@ -210,8 +252,7 @@ def main():
         'save',
         description="save a drive parameters to flash and to file.")
     save_parser.add_argument('--akd_file', '-a', type=str,
-                                help="Filename of the drive parameters,"
-                                " default to drive internal name.")
+                             help="Filename of the drive parameters, default to drive internal name.")
     save_parser.set_defaults(func=save_params)
 
 
@@ -242,7 +283,15 @@ def main():
     script_parser.add_argument('--seperator', default='\n', help='Seperator between command outputs')
     script_parser.set_defaults(func=run_script)
 
+    # `params` subparser
 
+    params_parser = subparsers.add_parser('params', help="Parameter file management for selected drives")
+    params_parser.add_argument('params_file', type=str, help="Parameter yaml file")
+
+    sub_params_parsers = params_parser.add_subparsers()
+
+    params_list = sub_params_parsers.add_parser('list', help="List paramters set in the file")
+    params_list.set_defaults(func=list_parameters)
 
 
     argcomplete.autocomplete(parser)
