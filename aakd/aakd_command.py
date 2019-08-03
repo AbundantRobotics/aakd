@@ -186,6 +186,27 @@ def list_parameters(args):
             print(p, v)
 
 
+def check_parameters(args):
+    for (name, ip) in drives(args):
+        try:
+            a = create_AKD(ip, args)
+            print("Checking ", nice_name(name, ip))
+            for (p, v) in list_params(name, args):
+                # TODO we do not know the types, this is a bit messy and fragile
+                try:
+                    dv = a.commandI(p)
+                except Exception:
+                    try:
+                        dv = a.commandF(p)
+                    except Exception:
+                        dv = a.commandS(p)
+                if dv != v:
+                    print(p, "is ", dv, " expected ", v)
+        except Exception as e:
+            print(nice_name(name, ip), " Error: ", str(e), file=sys.stderr)
+
+
+
 
 # Completion functions
 
@@ -292,6 +313,11 @@ def main():
 
     params_list = sub_params_parsers.add_parser('list', help="List paramters set in the file")
     params_list.set_defaults(func=list_parameters)
+
+    params_check = sub_params_parsers.add_parser('check', help="Show differences between drive and paramter file")
+    params_check.set_defaults(func=check_parameters)
+
+
 
 
     argcomplete.autocomplete(parser)
