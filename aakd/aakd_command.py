@@ -156,7 +156,8 @@ def save_params(args):
 
 
 def record(args):
-    filename = args.filename + '_'
+    from datetime import datetime
+    filename = datetime.now().isoformat(timespec='seconds') + args.filename + '_'
     frequency = args.frequency
 
     if (16000 % frequency != 0):
