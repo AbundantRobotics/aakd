@@ -2,6 +2,7 @@
 # PYTHON_ARGCOMPLETE_OK
 
 import aakd
+from aakd import nice_name
 
 import argcomplete
 import argparse
@@ -13,30 +14,36 @@ import sys
 
 def drives(args):
     """ Return a list of (name, ip) of drives to act on. """
-    ip = args.ip
+    ips = args.ip
+    names = args.name
     drives_file = args.drives_file
     groups = args.groups
-    if ip:
-        return [("", i) for i in ip]
+    if ips:
+        return [("", i) for i in ips]
     else:
         if not drives_file:
             raise Exception("Please provide and drive file")
         with open(drives_file) as f:
             yy = yaml.load(f, Loader=yaml.Loader)
             drives = []
-            for (name, p) in yy.items():
-                drive_groups = p.get("groups", [])
-                keep = True
-                for g in groups:
-                    if g not in drive_groups:
-                        keep = False
-                if keep:
-                    drives.append((name, p['ip']))
+            if names:
+                available_names = yy.keys()
+                for n in names:
+                    if n in available_names:
+                        drives.append((n, yy[n]['ip']))
+                    else:
+                        raise Exception("Name {} is not in the drive file".format(n))
+            else:
+                for (name, p) in yy.items():
+                    drive_groups = p.get("groups", [])
+                    keep = True
+                    for g in groups:
+                        if g not in drive_groups:
+                            keep = False
+                    if keep:
+                        drives.append((name, p['ip']))
+
             return drives
-
-
-def nice_name(name, ip):
-    return name + " (ip: " + ip + ")"
 
 
 def create_AKD(ip, args):
@@ -49,6 +56,28 @@ def create_AKD(ip, args):
         return aakd.AKD(lip[0], port=lip[1], trace=trace)
     else:
         raise Exception("Ip '{}' is invalid".format(ip))
+
+
+def parallel_create_AKD(function, function_extra_args, args):
+    if (args.sequential):
+        for (name, ip) in drives(args):
+            try:
+                a = create_AKD(ip, args)
+                function(a, name, ip, *function_extra_args)
+            except Exception as e:
+                print(nice_name(name, ip), " Error: ", str(e), file=sys.stderr)
+    else:
+        import concurrent.futures as futures
+        with futures.ThreadPoolExecutor() as pool:
+            fs = {}
+            for (name, ip) in drives(args):
+                nname = nice_name(name, ip)
+                fs[nname] = pool.submit(function, create_AKD(ip, args), name, ip, *function_extra_args)
+            for nname, f in fs.items():
+                try:
+                    f.result()
+                except Exception as e:
+                    print(nname, " Error: ", str(e), file=sys.stderr)
 
 
 def list_params(drive_name, args):
@@ -78,8 +107,8 @@ def list_params(drive_name, args):
     return drive_params
 
 
-
 # Subcommands function
+
 
 def akd_cmd(args):
     for (name, ip) in drives(args):
@@ -90,24 +119,25 @@ def akd_cmd(args):
             print(nice_name(name, ip), " Error: ", str(e), file=sys.stderr)
 
 
-def restore_params(args):
+def akd_info(args):
     for (name, ip) in drives(args):
         try:
             a = create_AKD(ip, args)
-            if not args.akd_file:
-                filename = a.name + ".akd"
-            else:
-                filename = args.akd_file
-            print("Restoring drive", nice_name(name, ip), "from", str(filename))
-            if args.factory:
-                print("Factory reset")
-                a.factory_params()
-            print("Loading")
-            a.load_params(filename)
-            print("Flash")
-            a.flash_params()
+            print(nice_name(name, ip), ": ")
+            print(a.drv_infos())
         except Exception as e:
             print(nice_name(name, ip), " Error: ", str(e), file=sys.stderr)
+
+
+def restore_params(args):
+    def restore(a, name, ip):
+        nonlocal args
+        if not args.akd_file:
+            filename = a.name + ".akd"
+        else:
+            filename = args.akd_file
+        a.load_params(filename, flash_afterward=True, factory_reset=args.factory, trust_drv_nvcheck=not args.force)
+    parallel_create_AKD(restore, [], args)
 
 
 def save_params(args):
@@ -120,7 +150,7 @@ def save_params(args):
                 filename = args.akd_file
             print("Saving drive " + ip + " to " + str(filename))
             a.flash_params()
-            a.save_params(filename)
+            a.save_params(filename, diffonly=not args.full)
         except Exception as e:
             print(nice_name(name, ip), " Error: ", str(e), file=sys.stderr)
 
@@ -187,28 +217,56 @@ def list_parameters(args):
 
 
 def check_parameters(args):
-    for (name, ip) in drives(args):
-        try:
-            a = create_AKD(ip, args)
-            print("Checking ", nice_name(name, ip))
-            for (p, v) in list_params(name, args):
-                # TODO we do not know the types, this is a bit messy and fragile
+    different_parameters = False
+
+    def check(a, name, ip):
+        nonlocal different_parameters
+        nname = nice_name(name, ip)
+        for (p, v) in list_params(name, args):
+            # TODO we do not know the types, this is a bit messy and fragile
+            try:
+                dv = a.commandI(p)
+            except Exception:
                 try:
-                    dv = a.commandI(p)
+                    dv = a.commandF(p)
                 except Exception:
-                    try:
-                        dv = a.commandF(p)
-                    except Exception:
-                        dv = a.commandS(p)
+                    dv = a.commandS(p)
+            if isinstance(dv, str):
                 if dv != v:
-                    print(p, "is ", dv, " expected ", v)
-        except Exception as e:
-            print(nice_name(name, ip), " Error: ", str(e), file=sys.stderr)
+                    different_parameters = True
+                    print(nname, p, "is ", dv, " expected ", v)
+            elif abs(dv - v) >= 0.003:  # storage of float seems 0.003 accurate
+                different_parameters = True
+                print(nname, p, "is ", dv, " expected ", v)
+
+    parallel_create_AKD(check, [], args)
+    return different_parameters
 
 
+def apply_parameters(args):
+
+    def apply(a, name, ip):
+        nonlocal args
+        if args.factory:
+            print("Factory reset for ", nice_name(name, ip))
+            a.factory_params()
+            a.cset("drv.name", name)
+        print("Apply parameters for ", nice_name(name, ip))
+        a.cset("drv.name", name)
+        for (p, v) in list_params(name, args):
+            a.cset(p, v)
+
+    parallel_create_AKD(apply, [], args)
 
 
 # Completion functions
+
+def completion_names(prefix, parsed_args, **kwargs):
+    if parsed_args.drives_file:
+        with open(parsed_args.drives_file) as f:
+            yy = yaml.load(f, Loader=yaml.Loader)
+            return set(yy.keys())
+    return []
 
 
 def completion_groups(prefix, parsed_args, **kwargs):
@@ -231,17 +289,20 @@ def completion_cmd(prefix, parsed_args, **kwargs):
 def main():
     # Parser definition
 
-
     parser = argparse.ArgumentParser(description="Run a command on an AKD drive or a list of them.")
-    parser.add_argument('--ip', type=str, action='append', default=[],  help="Drive IP/hostname to save")
     parser.add_argument('--drives_file', '-d', type=str,
                         help="A yaml file with drive descriptions with field 'ip'")
     parser.add_argument('--trace', action='store_true', help='Trace all commands and drive answers, heavy debug')
-    pg = parser.add_argument('--groups', '-g', type=str, action='append', default=[],
-                             help="A list of groups the drive need to match, like \"-g arm akdn\"")
+    parser.add_argument('--sequential', '-s', action="store_true", help="Prevent parallel access to drives, easier output to read")
 
+
+    drive_selection = parser.add_mutually_exclusive_group()
+    drive_selection.add_argument('--ip', type=str, action='append', default=[], help="Drive IP/hostname")
+    ng = drive_selection.add_argument('--name', '-n', type=str, action='append', default=[], help="Drive name according to the drive file")
+    ng.completer = completion_names
+    pg = drive_selection.add_argument('--groups', '-g', type=str, action='append', default=[],
+                                      help="A list of groups the drive need to match, like \"-g arm akdn\"")
     pg.completer = completion_groups
-
 
     subparsers = parser.add_subparsers()
 
@@ -253,6 +314,10 @@ def main():
     cmd_arg.completer = completion_cmd
     cmd_parser.set_defaults(func=akd_cmd)
 
+    # `info` subcommand
+
+    info_parser = subparsers.add_parser('info', help="Generic informations about drive and motor")
+    info_parser.set_defaults(func=akd_info)
 
     # `restore` subcommand
 
@@ -264,8 +329,9 @@ def main():
                                 " default to drive internal name.")
     restore_parser.add_argument('--factory', action="store_true",
                                 help="Factory reset before writing the parameters")
+    restore_parser.add_argument('--force', action="store_true",
+                                help="Force restoring even when drv.nvcheck matches")
     restore_parser.set_defaults(func=restore_params)
-
 
     # `save` subcommand
 
@@ -274,8 +340,8 @@ def main():
         description="save a drive parameters to flash and to file.")
     save_parser.add_argument('--akd_file', '-a', type=str,
                              help="Filename of the drive parameters, default to drive internal name.")
+    save_parser.add_argument('--full', action='store_true', help="Save every parameters even ones at default value.")
     save_parser.set_defaults(func=save_params)
-
 
     # `record` subcommand
 
@@ -290,16 +356,13 @@ def main():
     # `home_here subcommand
 
     home_parser = subparsers.add_parser(
-            'home',
-            description="Change fb1.offset to ensure current position (pl.fb) is 0.")
+        'home',
+        description="Change fb1.offset to ensure current position (pl.fb) is 0.")
     home_parser.set_defaults(func=home_here)
-
 
     # `script` subcommand
 
-    script_parser = subparsers.add_parser(
-        'script',
-        description='Runs a script')
+    script_parser = subparsers.add_parser('script', description='Runs a script')
     script_parser.add_argument('script_file', help='Filename of the script')
     script_parser.add_argument('--seperator', default='\n', help='Seperator between command outputs')
     script_parser.set_defaults(func=run_script)
@@ -311,21 +374,24 @@ def main():
 
     sub_params_parsers = params_parser.add_subparsers()
 
-    params_list = sub_params_parsers.add_parser('list', help="List paramters set in the file")
+    params_list = sub_params_parsers.add_parser('list', help="List parameters set in the file")
     params_list.set_defaults(func=list_parameters)
 
-    params_check = sub_params_parsers.add_parser('check', help="Show differences between drive and paramter file")
+    params_check = sub_params_parsers.add_parser('check', help="Show differences between drive and parameter file")
     params_check.set_defaults(func=check_parameters)
 
-
+    params_apply = sub_params_parsers.add_parser('apply', help="Apply parameter file")
+    params_apply.set_defaults(func=apply_parameters)
+    params_apply.add_argument('--factory', action="store_true",
+                              help="Factory reset before writing the parameters")
 
 
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
     if 'func' in args.__dict__:
-        args.func(args)
+        return args.func(args)
     else:
-        parser.print_usage()
+        return parser.print_usage()
 
 
 if __name__ == "__main__":

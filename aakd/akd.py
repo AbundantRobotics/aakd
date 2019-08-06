@@ -8,6 +8,10 @@ import struct
 import socket
 
 
+def nice_name(name, ip):
+    return name + " (ip: " + ip + ")"
+
+
 def akd_parse_internal(s):
     if s[0] == 70:  # Note that elements of a byte string are ints, 70 is 'F'
         factor = int(s[1:2])  # Slice to get a string
@@ -59,6 +63,9 @@ class AKD:
         self.connect()
         self.name = self.commandS("drv.name")
         atexit.register(AKD.disconnect, self)
+
+    def nice_name(self):
+        return nice_name(self.name, self.ip)
 
     def connect(self):
         try:
@@ -152,22 +159,98 @@ class AKD:
         else:
             self.command(var + ' ' + str(value))
 
-    def save_params(self, filename):
-        with open(filename, 'w') as f:
-            s = self.commandS("drv.nvlist")
-            f.write(s)
+    def drv_infos(self):
+        s = "# DRV.INFO\n# "
+        s += "\n#   ".join(self.commandS("drv.info").splitlines())
 
-    def load_params(self, filename):
+        info_vars = ["IP.MODE",
+                     "IL.KPDRATIO",
+                     "MOTOR.BRAKE",
+                     "MOTOR.CTF0",
+                     "MOTOR.ICONT",
+                     "MOTOR.INERTIA",
+                     "MOTOR.IPEAK",
+                     "MOTOR.KE",
+                     "MOTOR.KT",
+                     "MOTOR.LDLL",
+                     "MOTOR.LISAT",
+                     "MOTOR.LQLL",
+                     "MOTOR.NAME",
+                     "MOTOR.POLES",
+                     "MOTOR.R",
+                     "MOTOR.RSOURCE",
+                     "MOTOR.RTYPE",
+                     "MOTOR.TBRAKEAPP",
+                     "MOTOR.TBRAKERLS",
+                     "MOTOR.TEMPFAULT",
+                     "MOTOR.TYPE",
+                     "MOTOR.VMAX",
+                     "MOTOR.VOLTMAX",
+                     "FB1.IDENTIFIED"]
+        for v in info_vars:
+            try:
+                s += "\n# {} {}".format(v, self.commandS(v))
+            except Exception:
+                # silently fail since those params might not be part of the drive params (eg AKDC)
+                pass
+
+        s += "\n#\n# DRV.NVCHECK {}".format(self.commandS("drv.nvcheck"))
+        return s
+
+
+    def save_params(self, filename, diffonly=True):
+        with open(filename, 'w') as f:
+            if diffonly:
+                dd = self.diff_params()
+                for d in dd:
+                    print("{} {}   # ({})".format(d[0], d[1], d[2]), file=f)
+            else:
+                s = self.commandS("drv.nvlist")
+                f.write(s)
+
+            print("\n### Infos\n", file=f)
+            print(self.drv_infos(), file=f)
+
+
+    def load_params(self, filename, flash_afterward=True, factory_reset=False, trust_drv_nvcheck=True):
         with open(filename) as f:
-            for l in f:
-                if l[0] != '#':
-                    self.command(l.rstrip('\r\n'))
+            needs_update = True
+
+            if trust_drv_nvcheck:
+                for line in f:
+                    g = re.match("^# DRV.NVCHECK ([^ ]+)\n$", line)
+                    if g:
+                        print("{}\tMatching nvcheck found, no need to restore".format(self.nice_name()))
+                        if g.group(1) == self.commandS("DRV.NVCHECK"):
+                            needs_update = False
+
+            if needs_update:
+                print("{}\tRestoring parameters from {}".format(self.nice_name(), filename))
+                if factory_reset:
+                    self.factory_params()
+                for l in f:
+                    if l[0] != '#':
+                        self.command(l.rstrip('\r\n'))
+                if flash_afterward:
+                    self.flash_params()
+
+
+    def diff_params(self):
+        """ Return a list of (parameter, value, defaultvalue) for non default parameters in the drive """
+        delta = []
+        s = self.commandS("drv.difvar")
+        for l in s.splitlines():
+            g = re.match("(.*?) (.*?) \((.*)\)", l)
+            if not g:
+                raise Exception("Unexpected difvar output:", l)
+            delta.append((g.group(1), g.group(2), g.group(3)))
+        return delta
 
     def factory_params(self):
         return self.command("drv.rstvar", 20)  # long to do that
 
     def flash_params(self):
-        return self.command("drv.nvsave")
+        return self.command("drv.nvsave", 10)
 
     def rec_columns(self):
         """ Returns the list of the fields setup to be recorded. """

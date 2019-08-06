@@ -27,6 +27,7 @@ def record(akds, files, frequency, to_records, internal_trigger_akd_index=-1,
     cnt = 0
 
     def internal_trigger_callback(a):
+        nonlocal cnt
         if cnt < 2:
             a.cset("DOUT1.STATEU", 0)
         elif cnt < 3:
