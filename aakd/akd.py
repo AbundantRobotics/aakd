@@ -160,7 +160,7 @@ class AKD:
             self.command(var + ' ' + str(value))
 
     def drv_infos(self):
-        s = "# DRV.INFO\n# "
+        s = "# DRV.INFO\n#   "
         s += "\n#   ".join(self.commandS("drv.info").splitlines())
 
         info_vars = ["IP.MODE",
