@@ -46,6 +46,34 @@ def drives(args):
             return drives
 
 
+def akd_filename(name, ip, args):
+    if not args.akd_file:
+        filename = name + ".akd"
+    else:
+        filename = args.akd_file
+    return filename
+
+
+def deep_update_dict(d1, d2):
+    for k, v in d2.items():
+        if k in d1 and isinstance(d1[k], dict) and isinstance(v, dict):
+            deep_update_dict(d1[k], v)
+        else:
+            d1[k] = v
+
+
+def load_param_files(args):
+    params = {}
+    for param_file in args.params_file:
+        with open(param_file) as f:
+            new_params = yaml.load(f, Loader=yaml.Loader)
+            if not set(new_params.keys()).issubset(set(('drives', 'groups'))):
+                raise Exception("Paramter file top level keys should be drives or group, see " + param_file)
+            deep_update_dict(params, new_params)
+    return params
+
+
+
 def create_AKD(ip, args):
     trace = args.trace
 
@@ -82,29 +110,42 @@ def parallel_create_AKD(function, function_extra_args, args):
 
 def list_params(drive_name, args):
     """ Return a list of the parameters for drive_name according to drives_file and params_file"""
-    with open(args.params_file) as f:
-        paramtree = yaml.load(f, Loader=yaml.Loader)
+    paramtree = load_param_files(args)
 
     with open(args.drives_file) as f:
         yy = yaml.load(f, Loader=yaml.Loader)
         gs = yy[drive_name]["groups"]
 
-    drive_params = []
+    drive_params = {'DRV.NAME': drive_name}
 
     # do groups first
     def apply_group_parameters(subtree):
-        for parameter_value_pair in subtree.get("parameters", {}).items():
-            drive_params.append(parameter_value_pair)
+        for p, v in subtree.get("parameters", {}).items():
+            drive_params[p] = v
         for (group, subsubtree) in subtree.items():
             if group in gs:
                 apply_group_parameters(subsubtree)
     apply_group_parameters(paramtree.get("groups", {}))
 
     # do specific to the drive
-    for parameter_value_pair in paramtree.get("drives", {}).get(drive_name, {}).items():
-        drive_params.append(parameter_value_pair)
+    for p, v in paramtree.get("drives", {}).get(drive_name, {}).items():
+        drive_params[p] = v
 
     return drive_params
+
+
+def list_params_from_akdfiles(name, ip, args):
+    import re
+    with open(akd_filename(name, ip, args)) as f:
+        param_dict = {}
+        for l in f:
+            l = l.rstrip('\r\n')
+            if l and l[0] != '#':
+                g = re.match("^([^ ]+) ([^ \n]+).*", l)
+                if not g:
+                    raise Exception('Unexpected line in akd file: ' + repr(l))
+                param_dict[g.group(1)] = g.group(2)
+        return param_dict
 
 
 # Subcommands function
@@ -132,27 +173,19 @@ def akd_info(args):
 def restore_params(args):
     def restore(a, name, ip):
         nonlocal args
-        if not args.akd_file:
-            filename = a.name + ".akd"
-        else:
-            filename = args.akd_file
+        filename = akd_filename(name, ip, args)
         a.load_params(filename, flash_afterward=True, factory_reset=args.factory, trust_drv_nvcheck=not args.force)
     parallel_create_AKD(restore, [], args)
 
 
 def save_params(args):
-    for (name, ip) in drives(args):
-        try:
-            a = create_AKD(ip, args)
-            if not args.akd_file:
-                filename = a.name + ".akd"
-            else:
-                filename = args.akd_file
-            print("Saving drive " + ip + " to " + str(filename))
-            a.flash_params()
-            a.save_params(filename, diffonly=not args.full)
-        except Exception as e:
-            print(nice_name(name, ip), " Error: ", str(e), file=sys.stderr)
+    def save(a, name, ip):
+        nonlocal args
+        filename = akd_filename(name, ip, args)
+        print("Saving drive " + ip + " to " + str(filename))
+        a.flash_params()
+        a.save_params(filename, diffonly=not args.full)
+    parallel_create_AKD(save, [], args)
 
 
 def record(args):
@@ -210,11 +243,10 @@ def run_script(args):
 
 
 def list_parameters(args):
+    drives_params = {'drives': {}}
     for (name, ip) in drives(args):
-        print("##########")
-        print("# ", nice_name(name, ip), ":")
-        for (p, v) in list_params(name, args):
-            print(p, v)
+        drives_params['drives'][name] = list_params(name, args)
+    print(yaml.dump(drives_params, default_flow_style=False))
 
 
 def check_parameters(args):
@@ -223,7 +255,7 @@ def check_parameters(args):
     def check(a, name, ip):
         nonlocal different_parameters
         nname = nice_name(name, ip)
-        for (p, v) in list_params(name, args):
+        for (p, v) in list_params(name, args).items():
             # TODO we do not know the types, this is a bit messy and fragile
             try:
                 dv = a.commandI(p)
@@ -254,10 +286,43 @@ def apply_parameters(args):
             a.cset("drv.name", name)
         print("Apply parameters for ", nice_name(name, ip))
         a.cset("drv.name", name)
-        for (p, v) in list_params(name, args):
+        for (p, v) in list_params(name, args).items():
             a.cset(p, v)
 
     parallel_create_AKD(apply, [], args)
+
+
+def compare_parameters(args):
+    def compare(a, name, ip):
+        nonlocal args
+        diff_dict = {'new': {}, 'missing': {}, 'changed': {}}
+        params_akdfile = list_params_from_akdfiles(name, ip, args)
+        params_paramfile = list_params(name, args)
+        unchecked_ones = set(params_akdfile.keys())
+        for (p, v) in params_paramfile.items():
+            if p not in params_akdfile:
+                diff_dict['new'][p] = v
+            else:
+                unchecked_ones.remove(p)
+                if isinstance(v, str):
+                    if v != params_akdfile[p]:
+                        diff_dict['changed'][p] = {'new': v, 'old': params_akdfile[p]}
+                else:
+                    if abs(v - float(params_akdfile[p])) > 0.003:
+                        diff_dict['changed'][p] = {'new': v, 'old': params_akdfile[p]}
+        for p in unchecked_ones:
+            diff_dict['missing'][p] = (params_akdfile[p])
+
+        if args.onlynew:
+            print(yaml.dump({name: diff_dict['new']}, default_flow_style=False))
+        elif args.onlymissing:
+            print(yaml.dump({name: diff_dict['missing']}, default_flow_style=False))
+        elif args.onlychanged:
+            print(yaml.dump({name: diff_dict['changed']}, default_flow_style=False))
+        else:
+            print(yaml.dump({name: diff_dict}, default_flow_style=False))
+
+    parallel_create_AKD(compare, [], args)
 
 
 # Completion functions
@@ -295,6 +360,8 @@ def main():
                         help="A yaml file with drive descriptions with field 'ip'")
     parser.add_argument('--trace', action='store_true', help='Trace all commands and drive answers, heavy debug')
     parser.add_argument('--sequential', '-s', action="store_true", help="Prevent parallel access to drives, easier output to read")
+
+    parser.add_argument('--params_file', '-p', type=str, action='append', default=[], help="Parameter yaml files")
 
 
     drive_selection = parser.add_mutually_exclusive_group()
@@ -371,7 +438,6 @@ def main():
     # `params` subparser
 
     params_parser = subparsers.add_parser('params', help="Parameter file management for selected drives")
-    params_parser.add_argument('params_file', type=str, help="Parameter yaml file")
 
     sub_params_parsers = params_parser.add_subparsers()
 
@@ -385,6 +451,16 @@ def main():
     params_apply.set_defaults(func=apply_parameters)
     params_apply.add_argument('--factory', action="store_true",
                               help="Factory reset before writing the parameters")
+
+    params_compare = sub_params_parsers.add_parser('compare', help="Compare parameter file with the drive files")
+    params_compare.add_argument('--akd_file', '-a', type=str,
+                                help="Filename of the drive parameters,"
+                                " default to drive internal name.")
+    params_compare_option = params_compare.add_mutually_exclusive_group()
+    params_compare_option.add_argument('--onlychanged', action="store_true", help="Print only parameters which would change")
+    params_compare_option.add_argument('--onlynew', action="store_true", help="Print only parameters which are new")
+    params_compare_option.add_argument('--onlymissing', action="store_true", help="Print only parameters which are missing")
+    params_compare.set_defaults(func=compare_parameters)
 
 
     argcomplete.autocomplete(parser)
