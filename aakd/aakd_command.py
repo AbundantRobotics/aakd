@@ -87,11 +87,15 @@ def create_AKD(ip, args):
 
 
 def parallel_create_AKD(function, function_extra_args, args):
+
+    def thread_fun(name, ip, function_extra_args, args):
+        a = create_AKD(ip, args)
+        function(a, name, ip, *function_extra_args)
+
     if (args.sequential):
         for (name, ip) in drives(args):
             try:
-                a = create_AKD(ip, args)
-                function(a, name, ip, *function_extra_args)
+                thread_fun(name, ip, function_extra_args, args)
             except Exception as e:
                 print(nice_name(name, ip), " Error: ", str(e), file=sys.stderr)
     else:
@@ -100,7 +104,7 @@ def parallel_create_AKD(function, function_extra_args, args):
             fs = {}
             for (name, ip) in drives(args):
                 nname = nice_name(name, ip)
-                fs[nname] = pool.submit(function, create_AKD(ip, args), name, ip, *function_extra_args)
+                fs[nname] = pool.submit(thread_fun, name, ip, function_extra_args, args)
             for nname, f in fs.items():
                 try:
                     f.result()
@@ -182,7 +186,7 @@ def save_params(args):
     def save(a, name, ip):
         nonlocal args
         filename = akd_filename(name, ip, args)
-        print("Saving drive " + ip + " to " + str(filename))
+        print("Saving drive " + nice_name(name, ip) + " to " + str(filename))
         a.flash_params()
         a.save_params(filename, diffonly=not args.full)
     parallel_create_AKD(save, [], args)
