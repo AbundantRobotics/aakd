@@ -199,7 +199,7 @@ class AKD:
 
 
     def save_params(self, filename, diffonly=True):
-        with open(filename, 'w') as f:
+        with open(filename, 'w', newline='\r\n') as f:
             if diffonly:
                 dd = self.diff_params()
                 for d in dd:
