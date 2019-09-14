@@ -220,9 +220,9 @@ class AKD:
                 for line in f:
                     g = re.match("^# DRV.NVCHECK ([^ ]+)\n$", line)
                     if g:
-                        print("{}\tMatching nvcheck found, no need to restore".format(self.nice_name()))
                         if g.group(1) == self.commandS("DRV.NVCHECK"):
                             needs_update = False
+                            print("{}\tMatching nvcheck found, no need to restore".format(self.nice_name()))
 
             if needs_update:
                 print("{}\tRestoring parameters from {}".format(self.nice_name(), filename))
