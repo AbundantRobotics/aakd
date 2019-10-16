@@ -94,7 +94,16 @@ class AKD:
         self.disconnect()
         return False
 
+    def remove_comment(self, cmd):
+        m = re.match("(.*?)\s*#.*", cmd)
+        if m:
+            cmd = m.group(1)
+        return cmd
+
     def command(self, cmd, timeout=5):
+        cmd = self.remove_comment(cmd)
+        if not cmd:
+            return b""
         sending = cmd.encode('ascii') + b'\r\n'
         if self.trace:
             print(time.time(), repr(sending), flush=True)
@@ -250,13 +259,15 @@ class AKD:
         return self.command("drv.rstvar", 20)  # long to do that
 
     def flash_params(self):
-        return self.command("drv.nvsave", 10)
+        r = self.command("drv.nvsave", 10)
+        time.sleep(1)  # After saving, the falsh is written a bit after (background job)
+        return r
 
     def rec_columns(self):
         """ Returns the list of the fields setup to be recorded. """
         return self.commandS("rec.retrievehdr").splitlines()[2].split(',')
 
-    def rec_setup(self, frequency, to_record):
+    def rec_setup(self, frequency, to_record, numpoints=10000):
         """ Frequency [hz] parameter
         Note that recording one channel, we can go up to gap 5 (less than 4khz)
         three channels we go to gap 6 (3khz) etc.
@@ -271,7 +282,7 @@ class AKD:
 
         self.command("rec.off")
         self.cset("rec.gap", gap)
-        self.cset("rec.numpoints", 10000)  # max buffer size for recording
+        self.cset("rec.numpoints", min(int(numpoints), 10000))  # max buffer size for recording
         self.cset("rec.stoptype", 1)  # 0 for one shot, 1 for continuous
         self.cset("rec.retrievefrmt", 1)  # 0 for readable, 1 for internal
         self.cset("rec.retrievesize", 4800)
@@ -285,6 +296,14 @@ class AKD:
             j += 1
         self.frequency = frequency
         return frequency
+
+    def rec_setup_bitmask_trigger(self, trig_parameter, trig_bitmask, trig_value, trig_percent=90):
+        self.cset("rec.stoptype", 0)
+        self.cset("rec.trigtype", 5)
+        self.cset("rec.trigparam", trig_parameter)
+        self.cset("rec.trigmask", trig_bitmask)
+        self.cset("rec.trigval", trig_value)
+        self.cset("rec.trigpos", trig_percent)
 
     def rec_start(self):
         self.command("rec.trig")
@@ -327,6 +346,17 @@ class AKD:
             return fault_string.splitlines()
         else:
             return []
+
+    def faults_short(self):
+        fault_string = ""
+        for i in range(1, 11):
+            f = self.commandI("drv.fault" + str(i))
+            if f:
+                fault_string += (',' if fault_string else '') + 'F' + str(f)
+            else:
+                break
+        return fault_string
+
 
     def clear_faults(self):
         self.command("drv.clrfaults")

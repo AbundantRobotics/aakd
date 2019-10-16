@@ -75,6 +75,28 @@ def record(akds, files, frequency, to_records, internal_trigger_akd_index=-1,
             raise
 
 
+def record_on_fault(a, frequency, duration, to_record, polling_period=0.1):
+    """
+    """
+    numpoints = frequency * duration
+    a.rec_setup(frequency, to_record, numpoints)
+    a.rec_setup_bitmask_trigger("DS402.STATUSWORD", 8, 8)
+    # wait for no faults to be active
+    while a.faults():
+        time.sleep(polling_period)
+    # start the trigger waiting for an active fault
+    a.rec_start()
+    # wait for the trigger to be done
+    while not a.commandI("rec.done"):
+        time.sleep(polling_period)
+    # get the data
+    data = []
+    while a.rec_get(data):
+        pass
+    return data
+
+
+
 def current_profile_callback(a, prog_start_time, ctt):
     """ Apply the current time table `ctt` to the drive `a`.
     The table is supposed to be tuples (start_time, end_time, current)

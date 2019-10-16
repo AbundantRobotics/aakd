@@ -205,7 +205,7 @@ def record(args):
     try:
         akds = [create_AKD(ip, args) for (name, ip) in drives(args)]
         files = [
-            open(filename + a.commandS("drv.name") +
+            open(filename + a.name +
                  "_" + str(frequency) + "hz.csv", mode='w')
             for a in akds
         ]
@@ -215,6 +215,20 @@ def record(args):
     finally:
         for f in files:
             f.close()
+
+def monitor_faults(args):
+    def rec(a, name, ip):
+        nonlocal args
+        from datetime import datetime
+        while True:
+            filename = datetime.now().isoformat(timespec='seconds') + args.filename + '_'
+            data = aakd.record_on_fault(a, args.frequency, args.duration, args.fields.split(','))
+            with open(filename + name + "_" + str(args.frequency) + "_" + a.faults_short(), mode='w') as f:
+                print(a.rec_header(), file=f)
+                for l in data:
+                    print(','.join(str(v) for v in l), file=f)
+    parallel_create_AKD(rec, [], args)
+
 
 
 def home_here(args):
@@ -425,6 +439,17 @@ def main():
     record_parser.add_argument('--filename', help='Filename postfix (annotation)', default="")
     record_parser.set_defaults(func=record)
 
+    # `monitor_faults` subcommand
+
+    monitor_parser = subparsers.add_parser(
+        'monitor_faults',
+        description='Record an akd velocity profile, stop with Ctrl+c')
+    monitor_parser.add_argument('--fields', help='Fields to record', default="IL.FB,IL.CMD,VL.FB")
+    monitor_parser.add_argument('--frequency', type=int, help='Frequency [Hz]', default=1000)
+    monitor_parser.add_argument('--duration', type=float, help='Record duration [s]', default=3)
+    monitor_parser.add_argument('--filename', help='Filename postfix (annotation)', default="")
+    monitor_parser.set_defaults(func=monitor_faults)
+
     # `home_here subcommand
 
     home_parser = subparsers.add_parser(
@@ -436,7 +461,7 @@ def main():
 
     script_parser = subparsers.add_parser('script', description='Runs a script')
     script_parser.add_argument('script_file', help='Filename of the script')
-    script_parser.add_argument('--seperator', default='\n', help='Seperator between command outputs')
+    script_parser.add_argument('--separator', default='\n', help='Seperator between command outputs')
     script_parser.set_defaults(func=run_script)
 
     # `params` subparser
