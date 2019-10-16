@@ -436,7 +436,7 @@ def main():
     record_parser = subparsers.add_parser(
         'record',
         description='Record an akd velocity profile, stop with Ctrl+c')
-    record_parser.add_argument('--fields', help='Fields to record', default="IL.FB,IL.CMD,VL.FB")
+    record_parser.add_argument('--fields', help='Fields to record', default="il.fb,pl.cmd,pl.err,vl.cmd,vl.fb,il.mi2t")
     record_parser.add_argument('--frequency', type=int, help='Frequency [Hz]', default=1000)
     record_parser.add_argument('--filename', help='Filename postfix (annotation)', default="")
     record_parser.set_defaults(func=record)
@@ -446,7 +446,7 @@ def main():
     monitor_parser = subparsers.add_parser(
         'monitor_faults',
         description='Record an akd velocity profile, stop with Ctrl+c')
-    monitor_parser.add_argument('--fields', help='Fields to record', default="IL.FB,IL.CMD,VL.FB")
+    monitor_parser.add_argument('--fields', help='Fields to record', default="il.fb,pl.cmd,pl.err,vl.cmd,vl.fb,il.mi2t")
     monitor_parser.add_argument('--frequency', type=int, help='Frequency [Hz]', default=1000)
     monitor_parser.add_argument('--duration', type=float, help='Record duration [s]', default=3)
     monitor_parser.add_argument('--filename', help='Filename postfix (annotation)', default="")

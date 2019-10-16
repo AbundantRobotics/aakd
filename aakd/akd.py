@@ -274,8 +274,8 @@ class AKD:
         With normal format, instead of the internal,
         that is even worse, degrade by 2x almost
         """
-        if (len(to_record) > 5):
-            raise Exception("Cannot record more than 5 channels")
+        if (len(to_record) > 6):
+            raise Exception("Cannot record more than 6 channels")
 
         gap = math.ceil(16000.0 / frequency)
         frequency = 16000 / gap
