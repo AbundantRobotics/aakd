@@ -223,10 +223,12 @@ def monitor_faults(args):
         while True:
             filename = datetime.now().isoformat(timespec='seconds') + args.filename + '_'
             data = aakd.record_on_fault(a, args.frequency, args.duration, args.fields.split(','))
-            with open(filename + name + "_" + str(args.frequency) + "_" + a.faults_short(), mode='w') as f:
+            faults = a.faults_short()
+            with open(filename + name + "_" + str(args.frequency) + "_" + faults, mode='w') as f:
                 print(a.rec_header(), file=f)
                 for l in data:
                     print(','.join(str(v) for v in l), file=f)
+            print(nice_name(name, ip), " recorded ", faults)
     parallel_create_AKD(rec, [], args)
 
 
