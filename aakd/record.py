@@ -75,20 +75,28 @@ def record(akds, files, frequency, to_records, internal_trigger_akd_index=-1,
             raise
 
 
-def record_on_fault(a, frequency, duration, to_record, polling_period=0.1):
+def record_on_fault(a, frequency, duration, to_record, polling_period=0.1, stop=lambda: False):
     """
     """
     numpoints = frequency * duration
     a.rec_setup(frequency, to_record, numpoints)
     a.rec_setup_bitmask_trigger("DS402.STATUSWORD", 8, 8)
-    # wait for no faults to be active
-    while a.faults():
+    # wait for no faults to be active for 2 polling cycles
+    clear = 0
+    while clear < 2 and not stop():
+        if a.faults():
+            clear = 0
+        else:
+            clear = clear + 1
         time.sleep(polling_period)
     # start the trigger waiting for an active fault
     a.rec_start()
     # wait for the trigger to be done
     while not a.commandI("rec.done"):
-        time.sleep(polling_period)
+        if stop():
+            a.command("rec.off")
+            return []
+    time.sleep(polling_period)
     # get the data
     data = []
     while a.rec_get(data):

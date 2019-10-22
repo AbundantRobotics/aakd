@@ -86,30 +86,45 @@ def create_AKD(ip, args):
         raise Exception("Ip '{}' is invalid".format(ip))
 
 
-def parallel_create_AKD(function, function_extra_args, args):
+def parallel_create_AKD(function, function_extra_args, args, long_running=False):
+    stop_var = False
+    def stop():
+        nonlocal stop_var
+        return stop_var
 
     def thread_fun(name, ip, function_extra_args, args):
-        a = create_AKD(ip, args)
-        function(a, name, ip, *function_extra_args)
+        nonlocal stop, long_running
+        try:
+            a = create_AKD(ip, args)
+            if long_running:
+                function(a, name, ip, stop, *function_extra_args)
+            else:
+                function(a, name, ip, *function_extra_args)
+        except Exception as e:
+            print(nice_name(name, ip), " Error: ", str(e), file=sys.stderr)
 
     if (args.sequential):
         for (name, ip) in drives(args):
-            try:
-                thread_fun(name, ip, function_extra_args, args)
-            except Exception as e:
-                print(nice_name(name, ip), " Error: ", str(e), file=sys.stderr)
+            thread_fun(name, ip, function_extra_args, args)
+
     else:
         import concurrent.futures as futures
-        with futures.ThreadPoolExecutor() as pool:
+        dd = drives(args)
+        with futures.ThreadPoolExecutor(max_workers=len(dd) + 1) as pool:
             fs = {}
-            for (name, ip) in drives(args):
+            for (name, ip) in dd:
                 nname = nice_name(name, ip)
                 fs[nname] = pool.submit(thread_fun, name, ip, function_extra_args, args)
+
             for nname, f in fs.items():
                 try:
                     f.result()
                 except Exception as e:
                     print(nname, " Error: ", str(e), file=sys.stderr)
+                except KeyboardInterrupt:
+                    pool.shutdown(wait=False)
+                    stop_var = True
+                    pass
 
 
 def list_params(drive_name, args):
@@ -217,19 +232,22 @@ def record(args):
             f.close()
 
 def monitor_faults(args):
-    def rec(a, name, ip):
+    def rec(a, name, ip, stop):
         nonlocal args
         from datetime import datetime
-        while True:
+        while not stop():
             filename = datetime.now().isoformat(timespec='seconds') + args.filename + '_'
-            data = aakd.record_on_fault(a, args.frequency, args.duration, args.fields.split(','))
+            data = aakd.record_on_fault(a, args.frequency, args.duration, args.fields.split(','), stop=stop)
+            if not data:
+                print(nice_name(name, ip), " Interrupted monitoring")
+                return
             faults = a.faults_short()
             with open(filename + name + "_" + str(args.frequency) + "_" + faults, mode='w') as f:
                 print(a.rec_header(), file=f)
                 for l in data:
                     print(','.join(str(v) for v in l), file=f)
             print(nice_name(name, ip), " recorded ", faults)
-    parallel_create_AKD(rec, [], args)
+    parallel_create_AKD(rec, [], args, long_running=True)
 
 
 
