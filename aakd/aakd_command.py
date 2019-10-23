@@ -86,30 +86,47 @@ def create_AKD(ip, args):
         raise Exception("Ip '{}' is invalid".format(ip))
 
 
-def parallel_create_AKD(function, function_extra_args, args):
+def parallel_create_AKD(function, function_extra_args, args, long_running=False):
+    stop_var = False
+
+    def stop():
+        nonlocal stop_var
+        return stop_var
 
     def thread_fun(name, ip, function_extra_args, args):
+        nonlocal stop, long_running
         a = create_AKD(ip, args)
-        function(a, name, ip, *function_extra_args)
+        if long_running:
+            function(a, name, ip, stop, *function_extra_args)
+        else:
+            function(a, name, ip, *function_extra_args)
 
-    if (args.sequential):
-        for (name, ip) in drives(args):
-            try:
-                thread_fun(name, ip, function_extra_args, args)
-            except Exception as e:
-                print(nice_name(name, ip), " Error: ", str(e), file=sys.stderr)
-    else:
-        import concurrent.futures as futures
-        with futures.ThreadPoolExecutor() as pool:
-            fs = {}
-            for (name, ip) in drives(args):
-                nname = nice_name(name, ip)
-                fs[nname] = pool.submit(thread_fun, name, ip, function_extra_args, args)
-            for nname, f in fs.items():
+    import concurrent.futures as futures
+    dd = drives(args)
+    workers = args.threads if args.threads else len(dd) + 1
+    with futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        fs = {}
+        for (name, ip) in dd:
+            nname = nice_name(name, ip)
+            f = pool.submit(thread_fun, name, ip, function_extra_args, args)
+            fs[f] = nname
+        try:
+            for f in futures.as_completed(fs.keys()):
+                nname = fs[f]
                 try:
                     f.result()
                 except Exception as e:
-                    print(nname, " Error: ", str(e), file=sys.stderr)
+                    print(nname, "<Error> ", str(e), file=sys.stderr)
+                    if args.stop_on_error and not stop_var:
+                        stop_var = True
+                        for f in fs.keys():
+                            f.cancel()
+        except KeyboardInterrupt:
+            if not stop_var:
+                stop_var = True
+                for f in fs.keys():
+                    f.cancel()
+
 
 
 def list_params(drive_name, args):
@@ -194,7 +211,7 @@ def save_params(args):
 
 def record(args):
     from datetime import datetime
-    filename = datetime.now().isoformat(timespec='seconds') + args.filename + '_'
+    filename = datetime.now().isoformat(timespec='milliseconds') + '_' + args.filename + '_'
     frequency = args.frequency
 
     if (16000 % frequency != 0):
@@ -205,8 +222,7 @@ def record(args):
     try:
         akds = [create_AKD(ip, args) for (name, ip) in drives(args)]
         files = [
-            open(filename + a.commandS("drv.name") +
-                 "_" + str(frequency) + "hz.csv", mode='w')
+            open(filename + a.name, mode='w')
             for a in akds
         ]
         to_record = [args.fields.split(',')] * len(akds)
@@ -215,6 +231,28 @@ def record(args):
     finally:
         for f in files:
             f.close()
+
+def monitor_faults(args):
+    def rec(a, name, ip, stop):
+        nonlocal args
+        while not stop():
+            print(nice_name(name, ip), "monitoring started")
+            (fault, timestamp, data) = aakd.record_on_fault(a, args.frequency, args.duration, args.fields.split(','), stop=stop)
+
+            if not data:
+                print(nice_name(name, ip), " Interrupted monitoring")
+                return
+
+            timestamp_s = timestamp.isoformat(timespec='milliseconds')
+
+            filename = "{}_{}{}_{}.csv".format(timestamp_s, args.filename, fault, name)
+            with open(filename, mode='w') as f:
+                print(a.rec_header(), file=f)
+                for l in data:
+                    print(','.join(str(v) for v in l), file=f)
+            print("{} recorded {} at {}".format(nice_name(name, ip), fault, timestamp_s))
+    parallel_create_AKD(rec, [], args, long_running=True)
+
 
 
 def home_here(args):
@@ -363,8 +401,8 @@ def main():
     parser.add_argument('--drives_file', '-d', type=str,
                         help="A yaml file with drive descriptions with field 'ip'")
     parser.add_argument('--trace', action='store_true', help='Trace all commands and drive answers, heavy debug')
-    parser.add_argument('--sequential', '-s', action="store_true", help="Prevent parallel access to drives, easier output to read")
-
+    parser.add_argument('--threads', '-j', type=int, default=0, help="Limit the number of parallel workers. Default is 0 and it means as many as drives. 1 will execute each drives sequentially.")
+    parser.add_argument('--stop_on_error', action='store_true', help='If running on multiple drives, try to stop all when one fails')
     parser.add_argument('--params_file', '-p', type=str, action='append', default=[], help="Parameter yaml files")
 
 
@@ -420,10 +458,21 @@ def main():
     record_parser = subparsers.add_parser(
         'record',
         description='Record an akd velocity profile, stop with Ctrl+c')
-    record_parser.add_argument('--fields', help='Fields to record', default="IL.FB,IL.CMD,VL.FB")
+    record_parser.add_argument('--fields', help='Fields to record', default="il.fb,pl.cmd,pl.err,vl.cmd,vl.fb,il.mi2t")
     record_parser.add_argument('--frequency', type=int, help='Frequency [Hz]', default=1000)
     record_parser.add_argument('--filename', help='Filename postfix (annotation)', default="")
     record_parser.set_defaults(func=record)
+
+    # `monitor_faults` subcommand
+
+    monitor_parser = subparsers.add_parser(
+        'monitor_faults',
+        description='Record an akd velocity profile, stop with Ctrl+c')
+    monitor_parser.add_argument('--fields', help='Fields to record', default="il.fb,pl.cmd,pl.err,vl.cmd,vl.fb,il.mi2t")
+    monitor_parser.add_argument('--frequency', type=int, help='Frequency [Hz]', default=1000)
+    monitor_parser.add_argument('--duration', type=float, help='Record duration [s]', default=3)
+    monitor_parser.add_argument('--filename', help='Filename postfix (annotation)', default="")
+    monitor_parser.set_defaults(func=monitor_faults)
 
     # `home_here subcommand
 
@@ -436,7 +485,7 @@ def main():
 
     script_parser = subparsers.add_parser('script', description='Runs a script')
     script_parser.add_argument('script_file', help='Filename of the script')
-    script_parser.add_argument('--seperator', default='\n', help='Seperator between command outputs')
+    script_parser.add_argument('--separator', default='\n', help='Seperator between command outputs')
     script_parser.set_defaults(func=run_script)
 
     # `params` subparser
