@@ -236,19 +236,22 @@ def record(args):
 def monitor_faults(args):
     def rec(a, name, ip, stop):
         nonlocal args
-        from datetime import datetime
         while not stop():
             print(nice_name(name, ip), "monitoring started")
-            filename = datetime.now().isoformat(timespec='seconds') + args.filename + '_'
-            (fault, data) = aakd.record_on_fault(a, args.frequency, args.duration, args.fields.split(','), stop=stop)
+            (fault, timestamp, data) = aakd.record_on_fault(a, args.frequency, args.duration, args.fields.split(','), stop=stop)
+
             if not data:
                 print(nice_name(name, ip), " Interrupted monitoring")
                 return
-            with open(filename + name + "_" + str(args.frequency) + "_" + fault, mode='w') as f:
+
+            timestamp_s = timestamp.isoformat(timespec='milliseconds')
+
+            filename = "{}{}_{}_{}_{}".format(timestamp_s, args.filename, name, args.frequency, fault)
+            with open(filename, mode='w') as f:
                 print(a.rec_header(), file=f)
                 for l in data:
                     print(','.join(str(v) for v in l), file=f)
-            print(nice_name(name, ip), " recorded ", fault)
+            print("{} recorded {} at {}".format(nice_name(name, ip), fault, timestamp_s))
     parallel_create_AKD(rec, [], args, long_running=True)
 
 
@@ -468,7 +471,7 @@ def main():
         description='Record an akd velocity profile, stop with Ctrl+c')
     monitor_parser.add_argument('--fields', help='Fields to record', default="il.fb,pl.cmd,pl.err,vl.cmd,vl.fb,il.mi2t")
     monitor_parser.add_argument('--frequency', type=int, help='Frequency [Hz]', default=1000)
-    monitor_parser.add_argument('--duration', type=float, help='Record duration [s]', default=5)
+    monitor_parser.add_argument('--duration', type=float, help='Record duration [s]', default=3)
     monitor_parser.add_argument('--filename', help='Filename postfix (annotation)', default="")
     monitor_parser.set_defaults(func=monitor_faults)
 

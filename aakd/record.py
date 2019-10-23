@@ -3,6 +3,8 @@ import collections
 import threading
 import time
 
+from datetime import datetime
+
 
 def record(akds, files, frequency, to_records, internal_trigger_akd_index=-1,
            interact_callback=lambda akd: False):
@@ -95,16 +97,17 @@ def record_on_fault(a, frequency, duration, to_record, polling_period=0.1, stop=
     fault = ""
     while not fault and not stop():
         fault = a.faults_short()
+    timestamp = datetime.now()
     while not a.commandI("rec.done"):
         if stop():
             a.command("rec.off")
-            return (fault, [])
+            return (fault, timestamp, [])
     time.sleep(polling_period)
     # get the data
     data = []
     while a.rec_get(data):
         pass
-    return (fault, data)
+    return (fault, timestamp, data)
 
 
 
