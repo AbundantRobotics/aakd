@@ -211,7 +211,7 @@ def save_params(args):
 
 def record(args):
     from datetime import datetime
-    filename = datetime.now().isoformat(timespec='seconds') + args.filename + '_'
+    filename = datetime.now().isoformat(timespec='milliseconds') + '_' + args.filename + '_'
     frequency = args.frequency
 
     if (16000 % frequency != 0):
@@ -222,8 +222,7 @@ def record(args):
     try:
         akds = [create_AKD(ip, args) for (name, ip) in drives(args)]
         files = [
-            open(filename + a.name +
-                 "_" + str(frequency) + "hz.csv", mode='w')
+            open(filename + a.name, mode='w')
             for a in akds
         ]
         to_record = [args.fields.split(',')] * len(akds)
@@ -246,7 +245,7 @@ def monitor_faults(args):
 
             timestamp_s = timestamp.isoformat(timespec='milliseconds')
 
-            filename = "{}{}_{}_{}_{}".format(timestamp_s, args.filename, name, args.frequency, fault)
+            filename = "{}_{}{}_{}.csv".format(timestamp_s, args.filename, fault, name)
             with open(filename, mode='w') as f:
                 print(a.rec_header(), file=f)
                 for l in data:
