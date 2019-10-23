@@ -92,16 +92,19 @@ def record_on_fault(a, frequency, duration, to_record, polling_period=0.1, stop=
     # start the trigger waiting for an active fault
     a.rec_start()
     # wait for the trigger to be done
+    fault = ""
+    while not fault and not stop():
+        fault = a.faults_short()
     while not a.commandI("rec.done"):
         if stop():
             a.command("rec.off")
-            return []
+            return (fault, [])
     time.sleep(polling_period)
     # get the data
     data = []
     while a.rec_get(data):
         pass
-    return data
+    return (fault, data)
 
 
 

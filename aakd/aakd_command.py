@@ -240,16 +240,15 @@ def monitor_faults(args):
         while not stop():
             print(nice_name(name, ip), "monitoring started")
             filename = datetime.now().isoformat(timespec='seconds') + args.filename + '_'
-            data = aakd.record_on_fault(a, args.frequency, args.duration, args.fields.split(','), stop=stop)
+            (fault, data) = aakd.record_on_fault(a, args.frequency, args.duration, args.fields.split(','), stop=stop)
             if not data:
                 print(nice_name(name, ip), " Interrupted monitoring")
                 return
-            faults = a.faults_short()
-            with open(filename + name + "_" + str(args.frequency) + "_" + faults, mode='w') as f:
+            with open(filename + name + "_" + str(args.frequency) + "_" + fault, mode='w') as f:
                 print(a.rec_header(), file=f)
                 for l in data:
                     print(','.join(str(v) for v in l), file=f)
-            print(nice_name(name, ip), " recorded ", faults)
+            print(nice_name(name, ip), " recorded ", fault)
     parallel_create_AKD(rec, [], args, long_running=True)
 
 
