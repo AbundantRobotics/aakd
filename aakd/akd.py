@@ -284,6 +284,7 @@ class AKD:
         self.cset("rec.gap", gap)
         self.cset("rec.numpoints", min(int(numpoints), 10000))  # max buffer size for recording
         self.cset("rec.stoptype", 1)  # 0 for one shot, 1 for continuous
+        self.cset("rec.trigtype", 0)
         self.cset("rec.retrievefrmt", 1)  # 0 for readable, 1 for internal
         self.cset("rec.retrievesize", 4800)
 

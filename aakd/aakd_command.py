@@ -222,7 +222,7 @@ def record(args):
     try:
         akds = [create_AKD(ip, args) for (name, ip) in drives(args)]
         files = [
-            open(filename + a.name, mode='w')
+            open(filename + a.name + '.csv', mode='w')
             for a in akds
         ]
         to_record = [args.fields.split(',')] * len(akds)
