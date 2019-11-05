@@ -164,9 +164,9 @@ class AKD:
     def cset(self, var, value):
         """ Set a variable. """
         if isinstance(value, float):  # floats are rejected when they have more than 3 digits
-            self.command("{} {:.3f}".format(var, value))
+            return self.command("{} {:.3f}".format(var, value))
         else:
-            self.command(var + ' ' + str(value))
+            return self.command(var + ' ' + str(value))
 
     def drv_infos(self):
         s = "# DRV.INFO\n#   "
@@ -311,8 +311,11 @@ class AKD:
         self.rec_time = 0
         self.rec_time_incr = 1 / self.frequency
 
-    def rec_get(self, data):
-        lines = self.command("rec.retrievedata").splitlines()
+    def rec_get(self, data, index=None):
+        if index is None:
+            lines = self.command("rec.retrievedata").splitlines()
+        else:
+            lines = self.cset("rec.retrievedata", index).splitlines()
         gotdata = False
         for l in lines[1:]:
             data.append([
