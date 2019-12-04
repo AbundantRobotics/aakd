@@ -25,5 +25,8 @@ setuptools.setup(
         'console_scripts': [
             'aakd = aakd.aakd_command:main',
         ],
-    }
+    },
+    scripts=[
+        "aakd/plot_recording.py"
+    ]
 )
