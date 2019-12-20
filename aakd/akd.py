@@ -344,14 +344,21 @@ class AKD:
     def temperature(self):
         return self.commandI("motor.tempc")
 
-    def faults(self):
+    def faults(self, warnings=False):
+        faults = []
+
         fault_string = self.commandS("drv.faults")
         if (fault_string and fault_string != "No faults active"):
-            return fault_string.splitlines()
-        else:
-            return []
+            faults = [ 'F' + f for f in fault_string.splitlines()]
 
-    def faults_short(self):
+        if warnings:
+            fault_string = self.commandS("drv.warnings")
+            if (fault_string and fault_string != "No warnings active"):
+                faults.extend([ 'W' + f for f in fault_string.splitlines()])
+
+        return faults
+
+    def faults_short(self, warnings=False):
         fault_string = ""
         for i in range(1, 11):
             f = self.commandI("drv.fault" + str(i))
@@ -359,11 +366,41 @@ class AKD:
                 fault_string += (',' if fault_string else '') + 'F' + str(f)
             else:
                 break
+        if warnings:
+            for i in range(1, 11):
+                f = self.commandI("drv.warning" + str(i))
+                if f:
+                    fault_string += (',' if fault_string else '') + 'W' + str(f)
+                else:
+                    break
         return fault_string
+
+    def disable_sources(self):
+        drv_dissources_table = [
+            "Software disable",
+            "Fault exists",
+            "Hardware disable",
+            "In-rush disable (no high power)",
+            "Initialization disable (the drive did not finish the initialization)",
+            "Controlled stop disable from a digital input",
+            "Field Bus requested disable (SynqNet and EtherNet / IP only)",
+            "AKD-C requested disable (AKD-N only)",
+            "AKD pre-charge disable (AKD-C only)",
+            "Unknown",
+            "AKD-C in download mode"
+        ]
+        dissources = []
+        drvdisss = self.commandI("drv.dissources")
+        for source in drv_dissources_table:
+            if drvdisss & 1:
+                dissources.append(source)
+            drvdisss = drvdisss >> 1
+        return dissources
 
 
     def clear_faults(self):
         self.command("drv.clrfaults")
+
 
     def enable(self):
         self.clear_faults()

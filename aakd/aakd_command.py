@@ -367,6 +367,27 @@ def compare_parameters(args):
     parallel_create_AKD(compare, [], args)
 
 
+def drive_troubleshoot(args):
+    for (name, ip) in drives(args):
+        try:
+            a = create_AKD(ip, args)
+            print(nice_name(name, ip))
+            dissources = a.disable_sources()
+            if dissources:
+                print("  Drive disable sources")
+                for d in dissources:
+                    print("    ", d)
+
+            faults = a.faults(warnings=True)
+            if faults:
+                print("  Faults")
+                for f in faults:
+                    print("    ", f)
+        except Exception as e:
+            print(nice_name(name, ip), " Error: ", str(e), file=sys.stderr)
+
+
+
 # Completion functions
 
 def completion_names(prefix, parsed_args, **kwargs):
@@ -487,6 +508,12 @@ def main():
     script_parser.add_argument('script_file', help='Filename of the script')
     script_parser.add_argument('--separator', default='\n', help='Seperator between command outputs')
     script_parser.set_defaults(func=run_script)
+
+    # `troubleshoot` subcommand
+
+    script_parser = subparsers.add_parser('troubleshoot', description='Troubleshoot the drives')
+    script_parser.set_defaults(func=drive_troubleshoot)
+
 
     # `params` subparser
 
