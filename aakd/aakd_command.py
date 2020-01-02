@@ -6,6 +6,7 @@ from aakd import nice_name
 
 import argcomplete
 import argparse
+from pathlib import Path
 import yaml
 import sys
 
@@ -45,13 +46,20 @@ def drives(args):
 
             return drives
 
+def folder_path(args):
+    if args.folder:
+        return Path(args.folder)
+    if args.drives_file:
+        return Path(args.drives_file).parent
+    return Path.cwd()
+
 
 def akd_filename(name, ip, args):
     if not args.akd_file:
         filename = name + ".akd"
     else:
         filename = args.akd_file
-    return filename
+    return folder_path(args) / filename
 
 
 def deep_update_dict(d1, d2):
@@ -421,8 +429,10 @@ def main():
     parser = argparse.ArgumentParser(description="Run a command on an AKD drive or a list of them.")
     parser.add_argument('--drives_file', '-d', type=str,
                         help="A yaml file with drive descriptions with field 'ip'")
+    parser.add_argument('--folder', type=str,
+                        help="Where to save and restore from, default to the DRIVES_FILE folder if any or cwd")
     parser.add_argument('--trace', action='store_true', help='Trace all commands and drive answers, heavy debug')
-    parser.add_argument('--threads', '-j', type=int, default=0, help="Limit the number of parallel workers. Default is 0 and it means as many as drives. 1 will execute each drives sequentially.")
+    parser.add_argument('--threads', '-j', type=int, default=0, help="Limit the number of parallel workers. Default is 0 and it means as many as drives. 1 will execute each drives sequentially")
     parser.add_argument('--stop_on_error', action='store_true', help='If running on multiple drives, try to stop all when one fails')
     parser.add_argument('--params_file', '-p', type=str, action='append', default=[], help="Parameter yaml files")
 
