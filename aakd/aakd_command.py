@@ -55,10 +55,10 @@ def folder_path(args):
 
 
 def akd_filename(name, ip, args):
-    if not args.akd_file:
-        filename = name + ".akd"
-    else:
+    if getattr(args, 'akd_file', None):
         filename = args.akd_file
+    else:
+        filename = name + ".akd"
     return folder_path(args) / filename
 
 
@@ -213,7 +213,7 @@ def save_params(args):
         filename = akd_filename(name, ip, args)
         print("Saving drive " + nice_name(name, ip) + " to " + str(filename))
         a.flash_params()
-        a.save_params(filename, diffonly=not args.full)
+        a.save_params(filename, diffonly=not getattr(args, 'full', False))
     parallel_create_AKD(save, [], args)
 
 
@@ -273,8 +273,11 @@ def home_here(args):
             a.cset("fb1.offset", new_off)
             new_off = a.commandF("fb1.offset")
             print(nice_name(name, ip), "Offset old: {1}[{0}]  new: {2}[{0}]".format(unit, current_off, new_off))
+            a.disconnect()
         except Exception as e:
             print(nice_name(name, ip), " Error: ", str(e), file=sys.stderr)
+    if not args.no_save:
+        save_params(args)
 
 
 def run_script(args):
@@ -510,6 +513,7 @@ def main():
     home_parser = subparsers.add_parser(
         'home',
         description="Change fb1.offset to ensure current position (pl.fb) is 0.")
+    home_parser.add_argument('--no-save', action='store_true', help='Prevent auto saving after homing')
     home_parser.set_defaults(func=home_here)
 
     # `script` subcommand
@@ -555,6 +559,7 @@ def main():
 
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
+
     if 'func' in args.__dict__:
         return args.func(args)
     else:
