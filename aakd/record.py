@@ -83,6 +83,7 @@ def record_on_fault(a, frequency, duration, to_record, stop=lambda: False):
     numpoints = frequency * duration
     a.rec_setup(frequency, to_record, numpoints)
     a.rec_setup_bitmask_trigger("DS402.STATUSWORD", 8, 8)
+    # wait for current state to be cleared of faults
     clear = 0
     while clear < 2 and not stop():
         if a.faults():
@@ -90,12 +91,14 @@ def record_on_fault(a, frequency, duration, to_record, stop=lambda: False):
         else:
             clear = clear + 1
         time.sleep(0.05)
-    # start the trigger waiting for an active fault
+    # start the trigger waiting for a fault
     a.rec_start()
     # wait for the trigger to be done
     fault = ""
     while not fault and not stop():
         fault = a.faults_short()
+        # Polling too fast creates issues in the drive handling IO (esp DIN controlling brake release)
+        time.sleep(0.01)
     timestamp = datetime.now()
     while not a.commandI("rec.done"):
         if stop():
