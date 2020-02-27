@@ -237,6 +237,7 @@ class AKD:
                 print("{}\tRestoring parameters from {}".format(self.nice_name(), filename))
                 if factory_reset:
                     self.factory_params()
+                f.seek(0)
                 for l in f:
                     if l[0] != '#':
                         self.command(l.rstrip('\r\n'))
