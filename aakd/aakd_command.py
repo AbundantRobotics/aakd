@@ -20,7 +20,7 @@ def drives(args):
     drives_file = args.drives_file
     groups = args.groups
     if ips:
-        return [("", i) for i in ips]
+        return [(i, i) for i in ips]
     else:
         if not drives_file:
             raise Exception("Please provide and drive file")
