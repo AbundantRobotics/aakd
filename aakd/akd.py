@@ -420,3 +420,5 @@ class AKD:
             time.sleep(0.1)
         print("Drive disabled")
 
+    def
+
