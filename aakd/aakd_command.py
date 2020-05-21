@@ -346,36 +346,50 @@ def apply_parameters(args):
 
 
 def compare_parameters(args):
-    def compare(a, name, ip):
+    def compare(name, ip):
         nonlocal args
-        diff_dict = {'new': {}, 'missing': {}, 'changed': {}}
+        extra = {}
+        missing = {}
+        changed = {}
         params_akdfile = list_params_from_akdfiles(name, ip, args)
         params_paramfile = list_params(name, args)
         unchecked_ones = set(params_akdfile.keys())
         for (p, v) in params_paramfile.items():
             if p not in params_akdfile:
-                diff_dict['new'][p] = v
+                extra[p] = v
             else:
                 unchecked_ones.remove(p)
                 if isinstance(v, str):
                     if v != params_akdfile[p]:
-                        diff_dict['changed'][p] = {'new': v, 'old': params_akdfile[p]}
+                        changed[p] = f'{params_akdfile[p]}  # {v}'
                 else:
                     if abs(v - float(params_akdfile[p])) > 0.003:
-                        diff_dict['changed'][p] = {'new': v, 'old': params_akdfile[p]}
+                        changed[p] = f'{params_akdfile[p]}  # {v}'
         for p in unchecked_ones:
-            diff_dict['missing'][p] = (params_akdfile[p])
+            missing[p] = (params_akdfile[p])
 
         if args.onlynew:
-            print(yaml.dump({name: diff_dict['new']}, default_flow_style=False))
+            if extra:
+                print(yaml.dump({name: extra}, default_flow_style=False))
         elif args.onlymissing:
-            print(yaml.dump({name: diff_dict['missing']}, default_flow_style=False))
+            if missing:
+                print(yaml.dump({name: missing}, default_flow_style=False))
         elif args.onlychanged:
-            print(yaml.dump({name: diff_dict['changed']}, default_flow_style=False))
+            if changed:
+                print(yaml.dump({name: changed}, default_flow_style=False))
         else:
-            print(yaml.dump({name: diff_dict}, default_flow_style=False))
+            d = {}
+            if extra:
+                d['extra'] = extra
+            if missing:
+                d['missing'] = missing
+            if changed:
+                d['changed'] = changed
+            if d:
+                print(yaml.dump({name: d}, default_flow_style=False))
 
-    parallel_create_AKD(compare, [], args)
+    for name, ip in drives(args):
+        compare(name, ip)
 
 
 def drive_troubleshoot(args):
