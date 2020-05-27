@@ -27,11 +27,13 @@ def motiontask_setup(akd, mt_num, pos, vel, acc, dec, absolute=True, next_task=N
 
 
 def motiontask_completed(akd):
-    ms = akd.motion_status().is_error()
-    mserr = ms.is_error()
-    if mserr:
-        raise Exception(f"Motion Task Failed: {mserr}")
-    return (ms & MotionStat.MTCompleted) and not (ms & MotionStat.MotionActive)
+    ms = akd.motion_status()
+    done = (ms & MotionStat.MTCompleted) and not (ms & MotionStat.MotionActive)
+    if not done:  # It seems that tiny motion task updates will set MTFault but complete fine.
+        mserr = ms.is_error()
+        if mserr:
+            raise Exception(f"Motion Task Failed: {mserr}")
+    return done
 
 
 def motiontask_run(akd, mt_num):
@@ -41,8 +43,13 @@ def motiontask_run(akd, mt_num):
     akd.service_mode()
     akd.enable()
     akd.cset("mt.move", mt_num)
+    start_time = time.time()
     while not motiontask_completed(akd):
         f = akd.faults(warnings=True)
         if f:
             raise Exception("Drive Faults: " + f)
+        if time.time() - start_time > 2:
+            print("Position:", akd.commandS("pl.fb"))
+            start_time = time.time()
         time.sleep(0.01)
+    print("Position:", akd.commandS("pl.fb"))

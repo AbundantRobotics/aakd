@@ -422,7 +422,6 @@ def move(args):
         aakd.motiontask_setup(a, args.mtnum, args.position, args.velocity,
                               args.accel, args.decel, absolute=not args.relative)
         aakd.motiontask_run(a, args.mtnum)
-        print("Position: " + a.commandS("pl.fb"))
     except Exception as e:
         print(nice_name(name, ip), " Error: ", str(e), file=sys.stderr)
 
