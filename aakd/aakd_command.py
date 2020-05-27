@@ -412,6 +412,21 @@ def drive_troubleshoot(args):
             print(nice_name(name, ip), " Error: ", str(e), file=sys.stderr)
 
 
+def move(args):
+    d = drives(args)
+    if len(d) > 1:
+        raise Exception("Multi-drive move not supported")
+    try:
+        (name, ip) = d[0]
+        a = create_AKD(ip, args)
+        aakd.motiontask_setup(a, args.mtnum, args.position, args.velocity,
+                              args.accel, args.decel, absolute=not args.relative)
+        aakd.motiontask_run(a, args.mtnum)
+        print("Position: " + a.commandS("pl.fb"))
+    except Exception as e:
+        print(nice_name(name, ip), " Error: ", str(e), file=sys.stderr)
+
+
 
 # Completion functions
 
@@ -570,6 +585,18 @@ def main():
     params_compare_option.add_argument('--onlymissing', action="store_true", help="Print only parameters which are missing")
     params_compare.set_defaults(func=compare_parameters)
 
+    # `move` subparser
+
+    move_parser = subparsers.add_parser('move', description="Move commands running in service mode")
+
+    move_parser.add_argument("--relative", '--jog', '-r', action='store_true', help="Do a relative move instead of absolute")
+    move_parser.add_argument("--mtnum", default=100, type=int, help="[Advanced] Motion task number to use to execute the command")
+    move_parser.add_argument("position", type=float, help="Absolute position of position increment of the move")
+    move_parser.add_argument("velocity", type=float, help="Velocity of the move")
+    move_parser.add_argument("accel", type=float, help="Acceleration of the move")
+    move_parser.add_argument("decel", type=float, help="Deceleration of the move")
+
+    move_parser.set_defaults(func=move)
 
     argcomplete.autocomplete(parser)
     args = parser.parse_args()

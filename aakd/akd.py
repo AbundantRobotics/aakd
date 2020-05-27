@@ -8,6 +8,9 @@ import struct
 import socket
 
 
+from .akd_flags import MTCntl, MotionStat
+
+
 def nice_name(name, ip):
     return name + " (ip: " + ip + ")"
 
@@ -399,18 +402,28 @@ class AKD:
         return dissources
 
 
+    def motion_status(self):
+        return MotionStat(self.commandI("drv.motionstat"))
+
+
     def clear_faults(self):
         self.command("drv.clrfaults")
 
+    def service_mode(self):
+        self.cset("drv.opmode", 2)  # Set drive to Position mode
+        self.cset("drv.cmdsource", 0)  # Set drive to Service mode
 
     def enable(self):
         self.clear_faults()
         self.command("drv.en")
         while not self.commandI("drv.active"):
-            time.sleep(0.01)
             f = self.faults()
             if f:
                 raise Exception("Drive Faults: " + f)
+            diss = self.disable_sources()
+            if diss:
+                raise Exception("Cannot enable because: " + ", ".join(diss))
+            time.sleep(0.01)
             self.command("drv.en")
         print("Drive enabled")
 
@@ -419,6 +432,4 @@ class AKD:
             self.command("drv.dis")
             time.sleep(0.1)
         print("Drive disabled")
-
-    def
 

@@ -1,4 +1,5 @@
-import time
+""" The AKD drive flag sets """
+
 import enum
 
 
@@ -56,18 +57,28 @@ class MotionStat(enum.Flag):
             MotionStat.DriveNearHome         : "Drive actual position is within the homing target position window HOME.TPOSWND.",
             MotionStat.CoggingTeachMove      : "Cogging compensation teach move is active (high active).",
         }
-        return description_dict
+        return descriptions_dict
+
+    def is_error(self):
+        return self & (MotionStat.HomingError | MotionStat.EStop | MotionStat.EstopError |
+                       MotionStat.MTInvalid | MotionStat.MTFault)
 
     def __str__(self):
         sl = []
-        for flag in MTCntl:
+        for flag in MotionStat:
             if self & flag:
-                sl.append(f"{flag.name}: {descriptions()[flag]}")
+                sl.append(f"{flag.name}: {self.descriptions()[flag]}")
         return '\n'.join(sl)
 
 
 class MTCntl(enum.Flag):
-    """MT.CNTL flags definitions"""
+    """
+    MT.CNTL Flag definitions.
+    Note that it is actually a mix of flags and enum... so the printing doesn't work so well
+    and checking can generate surprises, for example, m & MTTypeRelative doesn't ensure that
+    it is relative to the command position, m can be MTTypeRelativePrev, or MTTypeRelativeExternal,
+    or MTTypeRelativeFeedback or simply MTTypeRelativePrev.
+    """
 
     MTTypeAbsolute = 0b0000
     MTTypeReserved = 0b1000
@@ -123,113 +134,5 @@ class MTCntl(enum.Flag):
         sl = []
         for flag in MTCntl:
             if self & flag:
-                sl.append(f"{flag.name}: {descriptions()[flag]}")
+                sl.append(f"{flag.name}: {self.descriptions()[flag]}")
         return '\n'.join(sl)
-
-
-def setup_motiontask(akd, mt_num, pos, vel, acc, dec, absolute=True, next_task=None, dwell_time=0):
-    akd.cset("mt.num", mt_num)
-    akd.cset("mt.")
-    akd.cset("mt.p", pos)
-    # We currently handle only trapezoidal motion tasks
-    mtcntl = MTCntl.MTAccelTrapezoidal
-    akd.cset("mt.v", vel)
-    akd.cset("mt.acc", acc)
-    akd.cset("mt.dec", dec)
-
-    mtcntl |= MTCntl.MTTypeAbsolute if absolute else MTCntl.MTTypeRelative
-
-    if next_task is not None:
-        akd.cset("mt.mtnext", next_task)
-        mtcntl |= MTCntl.MTExecuteNext
-        if dwell_time:
-            akd.cset("mt.tnext", dwell_time)
-            mtcntl |= MTCntl.MTNextDwell
-        else:
-            mtcntl |= MTCntl.MTNextDefault
-    akd.cset("mt.cntl", mtcntl.value)
-    akd.command("mt.set")
-
-
-#TODO setup_servicemode run_motiontask wait_motiontask motionstat_check (and fault, combine in a status check and use in aakd.enable())
-
-# Setting up parameters on all akdns (and storing current parameters)
-def akd_drv_setup(all_akdns):
-    print("Setting up drive parameter")
-    opmode_list = []
-    cmdsource_list = []
-    for akd in all_akdns:
-        a = akd['aakd_obj']
-        opmode = a.commandI("drv.opmode")
-        cmdsource = a.commandI("drv.cmdsource")
-        opmode_list.append(opmode)
-        cmdsource_list.append(cmdsource)
-        a.cset("drv.opmode", 2)  # Set drive to Position mode
-        a.cset("drv.cmdsource", 0)  # Set drive to Service mode
-    return opmode_list, cmdsource_list
-
-
-# Resetting parameters on all akdns
-def akd_drv_desetup(all_akdns, opmode_list, cmdsource_list):
-    print("Resetting drive parameters")
-    for idx, akd in enumerate(all_akdns):
-        a = akd['aakd_obj']
-        a.cset("drv.opmode", opmode_list[idx])
-        a.cset("drv.cmdsource", cmdsource_list[idx])
-
-
-# Clear Motion Task
-def akd_clear_mt(all_akdns):
-    print("Clear all existing motion tasks")
-    for akd in all_akdns:
-        a = akd['aakd_obj']
-        a.cset("mt.clear", -1)  # Clear all existing motion tasks
-
-
-def stop_fct(a):
-    last_task_check_val = last_task_dict[a.name]
-    current_task_str = a.commandS("mt.params")
-    # print('Current task: ' + str(a.name) + ' = ' + current_task_str[0])
-    if int(current_task_str[0]) == last_task_check_val:
-        motion_active = 0
-        print('Stop moving for: ' + a.name)
-    else:
-        motion_active = 1
-    return motion_active
-
-
-# Start motions for the given group
-def akd_start_motion(all_akdns, pos_list, mov_type):
-    for idx, akd in enumerate(all_akdns):
-        a = akd['aakd_obj']
-        start_pos = a.commandF("pl.fb")  # Extract current position
-        print('Start moving: ' + str(a.name))
-        a.cset("mt.move", 0)
-        while stop_fct(a):
-            if mov_type == 'absolute':
-                target_pos = pos_list[idx]
-            elif mov_type == 'relative':
-                target_pos = start_pos + pos_list[idx]
-            print('Motion still ongoing... Current position: ' + str(a.commandF("pl.fb")) + ' Target: ' + str(target_pos))
-
-
-
-# Provide list of akdns that one wishes to move, find which akdc correspond to each AKDN
-def akds_move_main(all_akdns, all_akdcs, pos_list, mov_type):
-    # Then setup drives and motions task
-    akd_create_aakd_obj(all_akdns, all_akdcs)
-    akd_check_swls(all_akdns)
-    akd_disable(all_akdns)
-    akd_clear_mt(all_akdns)
-    akd_clear_faults(all_akdns, all_akdcs)
-    opmode_list, cmdsource_list = akd_drv_setup(all_akdns)
-    akd_mt_setup(all_akdns, pos_list, mov_type)
-    # Enable AKD(s) and start motion(s)
-    akd_enable(all_akdns)
-    akd_start_motion(all_akdns, pos_list, mov_type)
-    akd_disable(all_akdns)
-    akd_clear_mt(all_akdns)
-    akd_drv_desetup(all_akdns, opmode_list, cmdsource_list)
-
-
-    print('All drives disabled, test over')
