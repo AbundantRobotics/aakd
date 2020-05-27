@@ -27,6 +27,9 @@ def motiontask_setup(akd, mt_num, pos, vel, acc, dec, absolute=True, next_task=N
 
 
 def motiontask_completed(akd):
+    """ Return whether the current task (indicated by mt.num) is completed.
+    Note that task chaining others will complete, then change task and be non completed again.
+    """
     ms = akd.motion_status()
     done = (ms & MotionStat.MTCompleted) and not (ms & MotionStat.MotionActive)
     if not done:  # It seems that tiny motion task updates will set MTFault but complete fine.
