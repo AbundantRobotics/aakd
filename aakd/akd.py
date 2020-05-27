@@ -407,7 +407,7 @@ class AKD:
         self.clear_faults()
         self.command("drv.en")
         while not self.commandI("drv.active"):
-            time.sleep(0.1)
+            time.sleep(0.01)
             f = self.faults()
             if f:
                 raise Exception("Drive Faults: " + f)

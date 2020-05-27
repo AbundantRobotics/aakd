@@ -3,6 +3,8 @@ import enum
 
 
 class MotionStat(enum.Flag):
+    """DRV.MOTIONSTAT flags definitions"""
+
     MotionActive = 2**0
     HomeFound = 2**1
     HomeFinished = 2**2
@@ -27,120 +29,129 @@ class MotionStat(enum.Flag):
     DriveNearHome = 2**21
     CoggingTeachMove = 2**22
 
-    _ignore_ = ["motionstat_descriptions"]
-    motionstat_descriptions = [
-        "Motion task is active (high active)",
-        "Home position found /reference point set (high active)",
-        "Home routine finished (high active)."
-            " Bits 1 and 2 both must be set to confirm that the homing process is complete.",
-        "Homing active (high active)",
-        "Homing error condition has occurred (high active)*",
-        "Slave in electronic gearing mode synchronized (high active)."
-            " Synchronization can be controlled using GEAR.SYNCWND",
-        "Electronic gearing is active (high active)",
-        "Emergency stop procedure in progress (high active)",
-        "Emergency stop procedure has an error (high active)",
-        "Service motion active (high active)",
-        "A motion task could not be activated /invalid MT (high active)**",
-        "Bit 11 will be set after the motion task has finished it’s “trajectory” and the actual"
-            " position is within the motion task target position window (MT.TPOSWND).",
-        "Motion task target velocity has been reached. See also (high active).",
-        "Motion task encountered an exception."
-            " A motion task exception can happen during a static motion task activation,"
-            " or during activation of motion task on the fly (when velocity is not zero)."
-            " The status bit will be reset automatically on successful activation of any motion,"
-            " or by a command DRV.CLRFAULT.",
-        "The target position of a motion task has been crossed."
-            " This situation occurs for motion tasks with a change on the fly when triggering"
-            " the DRV.STOP command just before the reaching the target velocity of the current"
-            " active motion task. The ramp-down procedure with the motion task deceleration ramp"
-            " causes the target position to be crossed (high active).",
-        "Bit 15 will be set if the actual position is within the motion task"
-            " target position window (MT.TPOSWND).",
-        "AKD BASIC trajectory generator is executing a move.",
-        "AKD BASIC trajectory generator has completed a move.",
-        "Reserved",
-        "Reserved",
-        "Reserved",
-        "Drive actual position is within the homing target position window HOME.TPOSWND.",
-        "Cogging compensation teach move is active (high active).",
-    ]
+    @classmethod
+    def descriptions(cls):
+        descriptions_dict = {
+            MotionStat.MotionActive          : "Motion task is active (high active)",
+            MotionStat.HomeFound             : "Home position found /reference point set (high active)",
+            MotionStat.HomeFinished          : "Home routine finished (high active). Bits 1 and 2 both must be set to confirm that the homing process is complete.",
+            MotionStat.HomingActive          : "Homing active (high active)",
+            MotionStat.HomingError           : "Homing error condition has occurred (high active)*",
+            MotionStat.SlaveElectronicGearing: "Slave in electronic gearing mode synchronized (high active). Synchronization can be controlled using GEAR.SYNCWND",
+            MotionStat.ElectronicGearing     : "Electronic gearing is active (high active)",
+            MotionStat.EStop                 : "Emergency stop procedure in progress (high active)",
+            MotionStat.EstopError            : "Emergency stop procedure has an error (high active)",
+            MotionStat.ServiceMotionActive   : "Service motion active (high active)",
+            MotionStat.MTInvalid             : "A motion task could not be activated /invalid MT (high active)**",
+            MotionStat.MTCompleted           : "Bit 11 will be set after the motion task has finished it’s “trajectory” and the actual position is within the motion task target position window (MT.TPOSWND).",
+            MotionStat.MTVelocityReached     : "Motion task target velocity has been reached. See also (high active).",
+            MotionStat.MTFault               : "Motion task encountered an exception. A motion task exception can happen during a static motion task activation, or during activation of motion task on the fly (when velocity is not zero). The status bit will be reset automatically on successful activation of any motion, or by a command DRV.CLRFAULT.",
+            MotionStat.MTPositionCrossed     : "The target position of a motion task has been crossed. This situation occurs for motion  tasks with a change on the fly when triggering the DRV.STOP command just before the reaching the target velocity of the current active motion task. The ramp-down procedure with the motion task deceleration ramp causes the target position to be crossed (high active).",
+            MotionStat.MTPositionReached     : "Bit 15 will be set if the actual position is within the motion task target position window (MT.TPOSWND).",
+            MotionStat.AKDBasicMoveInProgress: "AKD BASIC trajectory generator is executing a move.",
+            MotionStat.AKDBasicMoveCompleted : "AKD BASIC trajectory generator has completed a move.",
+            MotionStat.Reserved1             : "Reserved",
+            MotionStat.Reserved2             : "Reserved",
+            MotionStat.Reserved3             : "Reserved",
+            MotionStat.DriveNearHome         : "Drive actual position is within the homing target position window HOME.TPOSWND.",
+            MotionStat.CoggingTeachMove      : "Cogging compensation teach move is active (high active).",
+        }
+        return description_dict
 
     def __str__(self):
-        s = ""
-        for x in range(0, len(motionstat_descriptions)):
-            xms = MotionStat(2**x)
-            if self & xms:
-                s += f"{xms.name} (bit {x}): {motionstat_descriptions[x]}"
-        return s
+        sl = []
+        for flag in MTCntl:
+            if self & flag:
+                sl.append(f"{flag.name}: {descriptions()[flag]}")
+        return '\n'.join(sl)
 
 
+class MTCntl(enum.Flag):
+    """MT.CNTL flags definitions"""
+
+    MTTypeAbsolute = 0b0000
+    MTTypeReserved = 0b1000
+    MTTypeRelative = 0b0001
+    MTTypeRelativePrev = 0b0011
+    MTTypeRelativeExternal = 0b0101
+    MTTypeRelativeFeedback = 0b0111
+    MTExecuteNext = 0x00010
+    MTNextDefault = 0b00000 << 5
+    MTNextDwell = 0b00001 << 5
+    MTNextExternal = 0b00010 << 5
+    MTNextDwellExternal = 0b00011 << 5
+    MTNextDwellOrExternal = 0b00111 << 5
+    MTNextMergeSpeed = 0b10000 << 5
+    MTNextMergeAccel = 0b11000 << 5
+    MTAccelTrapezoidal = 0b00 << 10
+    MTAccelOneOneProfile = 0b01 << 10
+    MTAccelProfile = 0b11 << 10
+    MTReserved1 = 0x01000
+    MTExclusive = 0x02000
+    MTInterrupt = 0x04000
+    MTReserved2 = 0x08000
+    MTVelExternal = 0x10000
+
+    @classmethod
+    def descriptions(cls):
+        return {
+            MTCntl.MTTypeAbsolute: "Absolute. The target position is defined by the MT.P value.",
+            MTCntl.MTTypeReserved: "Reserved.",
+            MTCntl.MTTypeRelative: "Relative to Command Position. The target position is defined as: Target position = PL.CMD + MT.P",
+            MTCntl.MTTypeRelativePrev: "Relative to Previous Target Position. The target position is defined as: Target position = Target position of the last motion task + MT.P",
+            MTCntl.MTTypeRelativeExternal: "Relative to External Start Position. The target position is defined as: Target position = External start position + MT.P",
+            MTCntl.MTTypeRelativeFeedback: "Relative to Feedback Position. The target position is defined as: Target position = PL.FB + MT.P",
+            MTCntl.MTExecuteNext: "If set the next MT is executed.",
+            MTCntl.MTNextDefault: "Switches over to next MT after stopping. After an MT ends, the next MT starts immediately.",
+            MTCntl.MTNextDwell: "Switches over to next MT after stopping and delay. After an MT ends, the MT following time (MT.TNEXT) elapse in order to start the next MT.",
+            MTCntl.MTNextExternal: "Switches over to next MT after stopping and external event. After an MT ends, an external event (such as a high digital input) must occur in order to start the next MT.",
+            MTCntl.MTNextDwellExternal: "Switches over to next MT after stopping, delay, and external event. After an MT ends, the MT.TNEXT must elapse and an external event (such as a high digital input) must occur in order to start the next MT.",
+            MTCntl.MTNextDwellOrExternal: "Switches over to next MT after stopping, then delay or external event. After an MT ends, the MT.TNEXT must elapse or an external event (such as a high digital input) must occur in order to start the next MT.",
+            MTCntl.MTNextMergeSpeed: "Switches over to the next MT at present MT speed (change on the fly). After reaching the target position of an MT, the next MT starts. The drive then accelerates with the adjusted acceleration ramp of this next MT to the target velocity of this next MT. The MT.TNEXT setting is ignored.",
+            MTCntl.MTNextMergeAccel: "Switches over to the next MT at next MT speed (change on the fly). When the target position of an MT is reached, the drive has already accelerated with the acceleration ramp of the next MT to the target velocity of the next MT. Thus, the drive begins the next MT at the next MT target velocity. The MT.TNEXT setting is ignored if adjusted.",
+            MTCntl.MTAccelTrapezoidal: "Trapezoidal acceleration and deceleration.",
+            MTCntl.MTAccelOneOneProfile: "1:1 motion profile table motion task. The drive follows the customer motion profile table without inserting a constant velocity phase between the acceleration and deceleration process. This setting allows the usage of nonsymmetric velocity profiles. The MT.TNUM parameter defines which table to use for the 1:1 profile handling.",
+            MTCntl.MTAccelProfile: "Standard motion profile table motion task. The drive accelerates according to the shape of the motion profile table by stepping through the first half of the customer table. Then the drive inserts a constant velocity phase until the brake point is reached. Finally, the drive decelerates by stepping through the second half of the customer profile table. The MT.TNUM parameter defines which table to use for the 1:1 profile handling. This mode allows also a change on the fly between motion tasks (see Table 3 above). See \"AKD Customer Profile Application Note\" on the Kollmorgen web site (www.kollmorgen.com) for additional details.",
+            MTCntl.MTReserved1: "Deprecated as of firmware version 01-11-02-000. In previous versions of firmware this bit enabled the feedrate for homing (see HOME.FEEDRATE).",
+            MTCntl.MTExclusive: "If set, an attempt to trigger any new motion task will be denied while this motion task is currently running.",
+            MTCntl.MTInterrupt: "If this bit is set, the motion task that is supposed to be started cannot be started from velocity 0. The motion can be started if a motion task already running will be interrupted.",
+            MTCntl.MTReserved2: "Reserved.",
+            MTCntl.MTVelExternal: "The motion task target velocity will be taken from an external source such as an analog input signal (see AIN.MODE for further details)."
+        }
+
+    def __str__(self):
+        sl = []
+        for flag in MTCntl:
+            if self & flag:
+                sl.append(f"{flag.name}: {descriptions()[flag]}")
+        return '\n'.join(sl)
 
 
+def setup_motiontask(akd, mt_num, pos, vel, acc, dec, absolute=True, next_task=None, dwell_time=0):
+    akd.cset("mt.num", mt_num)
+    akd.cset("mt.")
+    akd.cset("mt.p", pos)
+    # We currently handle only trapezoidal motion tasks
+    mtcntl = MTCntl.MTAccelTrapezoidal
+    akd.cset("mt.v", vel)
+    akd.cset("mt.acc", acc)
+    akd.cset("mt.dec", dec)
+
+    mtcntl |= MTCntl.MTTypeAbsolute if absolute else MTCntl.MTTypeRelative
+
+    if next_task is not None:
+        akd.cset("mt.mtnext", next_task)
+        mtcntl |= MTCntl.MTExecuteNext
+        if dwell_time:
+            akd.cset("mt.tnext", dwell_time)
+            mtcntl |= MTCntl.MTNextDwell
+        else:
+            mtcntl |= MTCntl.MTNextDefault
+    akd.cset("mt.cntl", mtcntl.value)
+    akd.command("mt.set")
 
 
-execute_next_task = 16  # [0b10000] see mt.cntl  # Execute next move
-execute_next_task_with_dwell = 48  # [0b110000] see mt.cntl  # Execute next move with dwell
-do_not_execute_next_task = 0  # [0b00000] see mt.cntl  # Do not execute next move
-dwell_time_between_tasks = 100  # [ms]
-dwell_time_first_task = 500  # [ms]
-last_move_pos_incr = 1  # [deg]
-last_task_dict = {}  # Dictionary of last task for each akd
-
-
-
-def akd_mt_cfg_low_level(akd, task_num, pos, vel, acc, dec, next_task_flag, dwell_time):
-    a = akd['aakd_obj']
-    a.cset("mt.num", task_num)
-    a.cset("mt.p", pos)
-    a.cset("mt.v", vel)
-    a.cset("mt.acc", acc)
-    a.cset("mt.dec", dec)
-    if next_task_flag == 1:
-        a.cset("mt.cntl", execute_next_task_with_dwell)
-        a.cset("mt.tnext", dwell_time)
-        a.cset("mt.mtnext", task_num + 1)
-    elif next_task_flag == 0:
-        a.cset("mt.cntl", do_not_execute_next_task)
-    a.command("mt.set")  # Write the parameters to the Motion Task
-
-
-def akd_mt_cfg_high_level(akd, position, mov_type):
-    vel = akd['vel']
-    acc = akd['accdec']
-    dec = acc
-    dwell_time = dwell_time_between_tasks
-    global last_move_pos_incr
-    a = akd['aakd_obj']
-
-    start_pos = a.commandF("pl.fb")  # Extract current position
-    akd['start_pos'] = start_pos
-
-    task_num = 0
-    pos = akd['start_pos']
-    next_task_flag = 1
-    akd_mt_cfg_low_level(akd, task_num, pos, vel, acc, dec, next_task_flag, dwell_time_first_task)
-
-    task_num = 1
-    if mov_type == 'absolute':
-        pos = position - last_move_pos_incr
-    elif mov_type == 'relative':
-        pos = akd['start_pos'] + position - last_move_pos_incr
-    next_task_flag = 1
-    akd_mt_cfg_low_level(akd, task_num, pos, vel, acc, dec, next_task_flag, dwell_time)
-
-    task_num = 2
-    if mov_type == 'absolute':
-        pos = position
-    elif mov_type == 'relative':
-        pos = akd['start_pos'] + position
-    next_task_flag = 0
-    akd_mt_cfg_low_level(akd, task_num, pos, vel, acc, dec, next_task_flag, dwell_time)
-
-    akd['last_task'] = task_num
-    global last_task_dict
-    last_task_dict.update([(akd['name'], task_num)])
-
+#TODO setup_servicemode run_motiontask wait_motiontask motionstat_check (and fault, combine in a status check and use in aakd.enable())
 
 # Setting up parameters on all akdns (and storing current parameters)
 def akd_drv_setup(all_akdns):
@@ -158,15 +169,6 @@ def akd_drv_setup(all_akdns):
     return opmode_list, cmdsource_list
 
 
-# Setting up motion tasks on all akdns
-def akd_mt_setup(all_akdns, pos_list, mov_type):
-    print("Setting up motion task(s)")
-    for idx, akd in enumerate(all_akdns):
-        a = akd['aakd_obj']
-        target_pos = pos_list[idx]
-        akd_mt_cfg_high_level(akd, target_pos, mov_type)
-
-
 # Resetting parameters on all akdns
 def akd_drv_desetup(all_akdns, opmode_list, cmdsource_list):
     print("Resetting drive parameters")
@@ -174,8 +176,6 @@ def akd_drv_desetup(all_akdns, opmode_list, cmdsource_list):
         a = akd['aakd_obj']
         a.cset("drv.opmode", opmode_list[idx])
         a.cset("drv.cmdsource", cmdsource_list[idx])
-
-
 
 
 # Clear Motion Task
@@ -213,29 +213,6 @@ def akd_start_motion(all_akdns, pos_list, mov_type):
             print('Motion still ongoing... Current position: ' + str(a.commandF("pl.fb")) + ' Target: ' + str(target_pos))
 
 
-def akd_enable(all_akdns):
-    # Enabling all akdns in the group
-    print('Enable all akdns')
-    start = time.time()
-    for akd in all_akdns:
-        a = akd['aakd_obj']
-        print('Enabling drive: ' + akd['name'])
-        a.command("drv.en")  # Enable if not already
-        while (not a.commandI("drv.active")):
-            print("Waiting on drive to enable...")
-            end = time.time()
-        # Wait to make sure they have enabled
-    time.sleep(1)
-
-
-# Start motions for the given group
-def akd_disable(all_akdns):
-    print('Attempting to disable the drives in the group')
-    for akd in all_akdns:
-        a = akd['aakd_obj']
-        a.command("drv.dis")  # Disable if not already
-        print('Disabling drive for: ' + a.name)
-
 
 # Provide list of akdns that one wishes to move, find which akdc correspond to each AKDN
 def akds_move_main(all_akdns, all_akdcs, pos_list, mov_type):
@@ -256,25 +233,3 @@ def akds_move_main(all_akdns, all_akdcs, pos_list, mov_type):
 
 
     print('All drives disabled, test over')
-
-
-def akds_move(akdn_list_user, pos_list, mov_type):
-    # From this list above, retrieve the matching dictionary in the cfg file
-    akdn_list = []
-    akdc_list = []
-    for akdn_name_user in akdn_list_user:
-        akdn_dict, akdc_name = retrieve_akdn_dict(akdn_name_user)
-        akdn_list.append(akdn_dict)
-        akdc_dict = retrieve_akdc_dict(akdc_name)
-        if akdc_dict not in akdc_list:
-            akdc_list.append(akdc_dict)
-
-    akds_move_main(akdn_list, akdc_list, pos_list, mov_type)
-
-
-if __name__ == '__main__':
-    akdn_list_user = ['akdn_plung', 'akdn_vert']
-    pos_list = [200, 200]
-    mov_type = 'absolute'
-    akds_move(akdn_list_user, pos_list, mov_type)
-
