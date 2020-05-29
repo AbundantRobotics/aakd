@@ -202,6 +202,7 @@ def akd_info(args):
 def restore_params(args):
     def restore(a, name, ip):
         nonlocal args
+        a.disable()
         filename = akd_filename(name, ip, args)
         a.load_params(filename, flash_afterward=True, factory_reset=args.factory, trust_drv_nvcheck=not args.force)
     parallel_create_AKD(restore, [], args)
@@ -267,6 +268,7 @@ def home_here(args):
     for (name, ip) in drives(args):
         try:
             a = create_AKD(ip, args)
+            a.disable()
             current_pos = a.commandF("pl.fb")
             (current_off, unit) = a.commandF("fb1.offset", unit=True)
             new_off = -(current_pos - current_off)
@@ -333,6 +335,7 @@ def apply_parameters(args):
 
     def apply(a, name, ip):
         nonlocal args
+        a.disable()
         if args.factory:
             print("Factory reset for ", nice_name(name, ip))
             a.factory_params()
@@ -411,6 +414,35 @@ def drive_troubleshoot(args):
         except Exception as e:
             print(nice_name(name, ip), " Error: ", str(e), file=sys.stderr)
 
+
+def move(args):
+    d = drives(args)
+    if len(d) > 1:
+        raise Exception("Multi-drive move not supported")
+    try:
+        (name, ip) = d[0]
+        a = create_AKD(ip, args)
+        aakd.motiontask_setup(a, args.mtnum, args.position, args.velocity,
+                              args.accel, args.decel, absolute=not args.relative)
+        aakd.motiontask_run(a, args.mtnum)
+    except Exception as e:
+        print(nice_name(name, ip), " Error: ", str(e), file=sys.stderr)
+
+
+def enable(args):
+    def apply(a, name, ip):
+        nonlocal args
+        a.enable()
+
+    parallel_create_AKD(apply, [], args)
+
+
+def disable(args):
+    def apply(a, name, ip):
+        nonlocal args
+        a.disable()
+
+    parallel_create_AKD(apply, [], args)
 
 
 # Completion functions
@@ -569,6 +601,27 @@ def main():
     params_compare_option.add_argument('--onlynew', action="store_true", help="Print only parameters which are new")
     params_compare_option.add_argument('--onlymissing', action="store_true", help="Print only parameters which are missing")
     params_compare.set_defaults(func=compare_parameters)
+
+    # `move` subparser
+
+    move_parser = subparsers.add_parser('move', description="Move commands running in service mode")
+
+    move_parser.add_argument("--relative", '--jog', '-r', action='store_true', help="Do a relative move instead of absolute")
+    move_parser.add_argument("--mtnum", default=100, type=int, help="[Advanced] Motion task number to use to execute the command")
+    move_parser.add_argument("position", type=float, help="Absolute position of position increment of the move")
+    move_parser.add_argument("velocity", type=float, help="Velocity of the move")
+    move_parser.add_argument("accel", type=float, help="Acceleration of the move")
+    move_parser.add_argument("decel", type=float, help="Deceleration of the move")
+    
+    # `enable` subparser
+
+    enable_parser = subparsers.add_parser('enable', description="Enable the drive, clearing faults if needed, see also disable")
+    enable_parser.set_defaults(func=enable)
+    
+    # `disable` subparser
+
+    disable_parser = subparsers.add_parser('disable', description="Disable the drive, see also enable")
+    disable_parser.set_defaults(func=disable)
 
 
     argcomplete.autocomplete(parser)
