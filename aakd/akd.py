@@ -413,12 +413,19 @@ class AKD:
         self.cset("drv.opmode", 2)  # Set drive to Position mode
         self.cset("drv.cmdsource", 0)  # Set drive to Service mode
 
+    def is_active(self):
+        """ Return whether the drive is active or not.
+        Same as drv.active except that it knows about 3 (dynamic braking state)
+        which is a disabled state.
+        """
+        return self.commandI("drv.active") == 1
+
     def enable(self):
-        if self.commandI("drv.active"):
+        if self.is_active():
             return
         self.clear_faults()
         self.command("drv.en")
-        while not self.commandI("drv.active"):
+        while not self.is_active():
             f = self.faults()
             if f:
                 raise Exception("Drive Faults: " + f)
@@ -430,9 +437,10 @@ class AKD:
         print("Drive enabled")
 
     def disable(self):
-        if not self.commandI("drv.active"):
+        if not self.is_active():
+            self.command("drv.dis")  # To ensure SW enable is off even if the drive is not active
             return
-        while self.commandI("drv.active"):
+        while self.is_active():
             self.command("drv.dis")
             time.sleep(0.1)
         print("Drive disabled")
