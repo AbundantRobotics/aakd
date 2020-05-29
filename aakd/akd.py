@@ -414,6 +414,8 @@ class AKD:
         self.cset("drv.cmdsource", 0)  # Set drive to Service mode
 
     def enable(self):
+        if self.commandI("drv.active"):
+            return
         self.clear_faults()
         self.command("drv.en")
         while not self.commandI("drv.active"):
@@ -428,6 +430,8 @@ class AKD:
         print("Drive enabled")
 
     def disable(self):
+        if not self.commandI("drv.active"):
+            return
         while self.commandI("drv.active"):
             self.command("drv.dis")
             time.sleep(0.1)

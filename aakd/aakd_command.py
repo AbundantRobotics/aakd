@@ -202,6 +202,7 @@ def akd_info(args):
 def restore_params(args):
     def restore(a, name, ip):
         nonlocal args
+        a.disable()
         filename = akd_filename(name, ip, args)
         a.load_params(filename, flash_afterward=True, factory_reset=args.factory, trust_drv_nvcheck=not args.force)
     parallel_create_AKD(restore, [], args)
@@ -267,6 +268,7 @@ def home_here(args):
     for (name, ip) in drives(args):
         try:
             a = create_AKD(ip, args)
+            a.disable()
             current_pos = a.commandF("pl.fb")
             (current_off, unit) = a.commandF("fb1.offset", unit=True)
             new_off = -(current_pos - current_off)
@@ -333,6 +335,7 @@ def apply_parameters(args):
 
     def apply(a, name, ip):
         nonlocal args
+        a.disable()
         if args.factory:
             print("Factory reset for ", nice_name(name, ip))
             a.factory_params()
@@ -425,6 +428,21 @@ def move(args):
     except Exception as e:
         print(nice_name(name, ip), " Error: ", str(e), file=sys.stderr)
 
+
+def enable(args):
+    def apply(a, name, ip):
+        nonlocal args
+        a.enable()
+
+    parallel_create_AKD(apply, [], args)
+
+
+def disable(args):
+    def apply(a, name, ip):
+        nonlocal args
+        a.disable()
+
+    parallel_create_AKD(apply, [], args)
 
 
 # Completion functions
@@ -594,8 +612,17 @@ def main():
     move_parser.add_argument("velocity", type=float, help="Velocity of the move")
     move_parser.add_argument("accel", type=float, help="Acceleration of the move")
     move_parser.add_argument("decel", type=float, help="Deceleration of the move")
+    
+    # `enable` subparser
 
-    move_parser.set_defaults(func=move)
+    enable_parser = subparsers.add_parser('enable', description="Enable the drive, clearing faults if needed, see also disable")
+    enable_parser.set_defaults(func=enable)
+    
+    # `disable` subparser
+
+    disable_parser = subparsers.add_parser('disable', description="Disable the drive, see also enable")
+    disable_parser.set_defaults(func=disable)
+
 
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
