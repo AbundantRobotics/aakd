@@ -612,6 +612,7 @@ def main():
     move_parser.add_argument("velocity", type=float, help="Velocity of the move")
     move_parser.add_argument("accel", type=float, help="Acceleration of the move")
     move_parser.add_argument("decel", type=float, help="Deceleration of the move")
+    move_parser.set_defaults(func=move)
     
     # `enable` subparser
 
