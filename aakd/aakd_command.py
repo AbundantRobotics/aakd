@@ -359,6 +359,7 @@ def compare_parameters(args):
         extra = {}
         missing = {}
         changed = {}
+        same = {}
         params_akdfile = list_params_from_akdfiles(name, ip, args)
         params_paramfile = list_params(name, args)
         unchecked_ones = set(params_akdfile.keys())
@@ -370,9 +371,13 @@ def compare_parameters(args):
                 if isinstance(v, str):
                     if v != params_akdfile[p]:
                         changed[p] = f'{params_akdfile[p]}  # {v}'
+                    else:
+                        same[p] = params_akdfile[p]
                 else:
                     if abs(v - float(params_akdfile[p])) > 0.003:
                         changed[p] = f'{params_akdfile[p]}  # {v}'
+                    else:
+                        same[p] = params_akdfile[p]
         for p in unchecked_ones:
             missing[p] = (params_akdfile[p])
 
@@ -395,6 +400,36 @@ def compare_parameters(args):
                 d['changed'] = changed
             if d:
                 print(yaml.dump({name: d}, default_flow_style=False))
+
+        if args.merge:
+            def prompt(msg):
+                r = input(msg + " Y/n?\n")
+                return r == '' or r == 'Y' or r == 'y'
+
+            output = []
+            for p, v in same.items():
+                output.append(f"{p} {v}")
+            for p, v in extra.items():
+                if prompt(f"Add new parameter {p} {v}"):
+                    output.append(f"{p} {v}")
+            for p, v in missing.items():
+                if prompt(f"Keep extra drive parameter {p} {v}"):
+                    output.append(f"{p} {v}")
+            for p, v in changed.items():
+                vd = params_akdfile[p]
+                vp = params_paramfile[p]
+                if prompt(f"Change parameter {p} {vd} to {vp}"):
+                    output.append(f"{p} {vp}")
+                else:
+                    output.append(f"{p} {vd}")
+
+            output.sort(key=lambda s: '0'+s if "UNIT." in s else s)  # Keep UNIT at top of file
+
+            Path(akd_filename(name, ip, args)).rename(Path(str(akd_filename(name, ip, args)) + ".orig"))
+
+            with open(akd_filename(name, ip, args), 'w') as f:
+                for o in output:
+                    print(o, file=f)
 
     for name, ip in drives(args):
         compare(name, ip)
@@ -599,13 +634,19 @@ def main():
 
     params_compare = sub_params_parsers.add_parser('compare', help="Compare parameter file with the drive files")
     params_compare.add_argument('--akd_file', '-a', type=str,
-                                help="Filename of the drive parameters,"
-                                " default to drive internal name.")
+                                help="Filename of the drive parameters, default to drive internal name.")
     params_compare_option = params_compare.add_mutually_exclusive_group()
     params_compare_option.add_argument('--onlychanged', action="store_true", help="Print only parameters which would change")
     params_compare_option.add_argument('--onlynew', action="store_true", help="Print only parameters which are new")
     params_compare_option.add_argument('--onlymissing', action="store_true", help="Print only parameters which are missing")
+    params_compare.set_defaults(merge=False)
     params_compare.set_defaults(func=compare_parameters)
+
+    params_merge = sub_params_parsers.add_parser('merge', help="Merge parameter file in the drive file")
+    params_merge.add_argument('--akd_file', '-a', type=str,
+                              help="Filename of the drive parameters, default to drive internal name.")
+    params_merge.set_defaults(merge=True)
+    params_merge.set_defaults(func=compare_parameters)
 
     # `move` subparser
 
