@@ -11,6 +11,11 @@ import yaml
 import sys
 
 
+def date_to_filename(d):
+    from dateutil.tz import tzlocal
+    return d.astimezone(tzlocal()).isoformat(timespec='milliseconds')
+
+
 # Helper functions
 
 def drives(args):
@@ -75,7 +80,7 @@ def load_param_files(args):
     for param_file in args.params_file:
         with open(param_file) as f:
             new_params = yaml.load(f, Loader=yaml.Loader)
-            if not set(new_params.keys()).issubset(set(('drives', 'groups'))):
+            if not set(new_params.keys()).issubset({'drives', 'groups'}):
                 raise Exception("Paramter file top level keys should be drives or group, see " + param_file)
             deep_update_dict(params, new_params)
     return params
@@ -220,7 +225,7 @@ def save_params(args):
 
 def record(args):
     from datetime import datetime
-    filename = datetime.now().isoformat(timespec='milliseconds') + '_' + args.filename + '_'
+    filename = date_to_filename(datetime.now()) + '_' + args.filename + '_'
     frequency = args.frequency
 
     if (16000 % frequency != 0):
@@ -252,7 +257,7 @@ def monitor_faults(args):
                 print(nice_name(name, ip), " Interrupted monitoring")
                 return
 
-            timestamp_s = timestamp.isoformat(timespec='milliseconds')
+            timestamp_s = date_to_filename(timestamp)
 
             filename = "{}_{}{}_{}.csv".format(timestamp_s, args.filename, fault, name)
             with open(filename, mode='w') as f:
