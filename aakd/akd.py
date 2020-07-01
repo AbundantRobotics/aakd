@@ -418,7 +418,13 @@ class AKD:
         Same as drv.active except that it knows about 3 (dynamic braking state)
         which is a disabled state.
         """
-        return self.commandI("drv.active") == 1
+        try:
+            return self.commandI("drv.active") == 1
+        except Exception as e:
+            if "Command was not found" in str(e):
+                return False
+            else:
+                raise
 
     def enable(self):
         if self.is_active():
@@ -437,11 +443,17 @@ class AKD:
         print("Drive enabled")
 
     def disable(self):
-        if not self.is_active():
-            self.command("drv.dis")  # To ensure SW enable is off even if the drive is not active
-            return
-        while self.is_active():
-            self.command("drv.dis")
-            time.sleep(0.1)
-        print("Drive disabled")
+        try:
+            if not self.is_active():
+                self.command("drv.dis")  # To ensure SW enable is off even if the drive is not active
+                return
+            while self.is_active():
+                self.command("drv.dis")
+                time.sleep(0.1)
+            print("Drive disabled")
+        except Exception as e:
+            if "Command was not found" in str(e):
+                pass
+            else:
+                raise
 
