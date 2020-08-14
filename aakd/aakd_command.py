@@ -645,6 +645,9 @@ def main():
     params_merge = sub_params_parsers.add_parser('merge', help="Merge parameter file in the drive file")
     params_merge.add_argument('--akd_file', '-a', type=str,
                               help="Filename of the drive parameters, default to drive internal name.")
+    params_merge.add_argument('--onlychanged', action="store_true", help="Print only parameters which would change")
+    params_merge.add_argument('--onlynew', action="store_true", help="Print only parameters which are new")
+    params_merge.add_argument('--onlymissing', action="store_true", help="Print only parameters which are missing")
     params_merge.set_defaults(merge=True)
     params_merge.set_defaults(func=compare_parameters)
 
